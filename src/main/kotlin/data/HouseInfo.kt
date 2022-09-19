@@ -1,39 +1,71 @@
-package cn.status102
+package cn.status102.data
 
+import cn.status102.WannaHomeKt
+import cn.status102.WannaHomeKt.reload
+import cn.status102.client
+import cn.status102.data.HouseInfo.Companion.Logger.CallTimes
+import cn.status102.data.HouseInfo.Companion.Logger.FailTimes
+import cn.status102.data.HouseInfo.Companion.Logger.TimeMillis
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import net.mamoe.mirai.console.data.AutoSavePluginData
+import net.mamoe.mirai.console.data.value
 import net.mamoe.mirai.utils.error
+import okhttp3.CacheControl
 import okhttp3.Call
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
 import java.util.*
-import kotlin.math.floor
+import java.util.concurrent.TimeUnit
 
 class HouseInfo : VoteInfoOperate {
 
 	companion object {
-		private const val HomeUrl = "https://wanahome.ffxiv.bingyin.org/api/state/"
-		private fun newRequest(serverId: String): Request {
-			return Request.Builder().url("$HomeUrl?server=${serverId}&type=0").get().build()
+		init {
+			Logger.reload()
 		}
 
-		private fun newCall(serverId: String): Call {
+		object Logger : AutoSavePluginData("Wanahome_Bingyin_Log") {
+			var CallTimes by value(0)
+			var FailTimes by value(0)
+			var TimeMillis by value(0L)
+		}
+
+		var LastModified = ""
+		private const val HomeUrl = "https://wanahome.ffxiv.bingyin.org/api/state/"
+		private fun newRequest(serverId: Int): Request {
+			return Request.Builder().url("$HomeUrl?server=${serverId}&type=0").get()
+				.cacheControl(CacheControl.Builder().maxAge(1, TimeUnit.MINUTES).build()).run {
+					if (LastModified.isNotEmpty())
+						this.addHeader("If-Modified-Since", LastModified)
+					this
+				}.build()
+		}
+
+		private fun newCall(serverId: Int): Call {
 			return client.newCall(newRequest(serverId))
 		}
 
-		fun call(serverId: String, reCallTimes: Int = 0, reCallTimesLimit: Int = 3): Response {
+		fun call(serverId: Int, reCallTimes: Int = 0, reCallTimesLimit: Int = 3): Response {
 			try {
-				return newCall(serverId).execute()
+				return newCall(serverId).execute().apply {
+					if (networkResponse != null)
+						CallTimes++
+				}
 			} catch (e: IOException) {
 				if (reCallTimes < reCallTimesLimit) {
+					CallTimes++
+					FailTimes++
 					WannaHomeKt.logger.error { "冰音获取错误：$e\n${e.stackTraceToString()}" }
 					return call(serverId, reCallTimes + 1)
 				}
 				throw e
 			} catch (e: Exception) {
+				CallTimes++
+				FailTimes++
 				throw e
 			}
 		}
@@ -43,28 +75,30 @@ class HouseInfo : VoteInfoOperate {
 		Json { ignoreUnknownKeys = true }
 	}
 
-	override suspend fun run(serverId: String): Map<String, PlotInfo> {
+	override suspend fun run(serverId: Int, lastTurnStart: Long, thisTurnStart: Long): Map<String, PlotInfo> {
 		//WannaHomeKt.logger.info { "开始获取冰音：${SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(Calendar.getInstance().time.time)}" }
-
-		val now = Calendar.getInstance().time.time
-		val start = Calendar.getInstance().apply { time = strTimeToDate("2022-08-08 23:00:00") }
-		val diff = floor((now - start.time.time) / 1000 / 60.0 / 60 / 24).toInt()
-		val turn = diff / 9 + 1
-		val thisTurnStart = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, (turn - 1) * 9) }
 
 		val voteInfoMap = mutableMapOf<String, PlotInfo>()
 		try {
-			val resWH = call(serverId)
-			val strWH = resWH.body?.string() ?: ""
-			if (resWH.isSuccessful && strWH.isNotEmpty()) {
-				val saleList = jsonDecoder.decodeFromString<ServerData>(strWH)
-				if (saleList.LastUpdate >= thisTurnStart.time.time / 1000)
-					saleList.OnSale.forEach {
-						voteInfoMap["${it.TerritoryId}-${it.WardId}-${it.HouseId}"] =
-							PlotInfo(it.TerritoryId, it.WardId, it.HouseId, it.Size - 1, saleList.LastUpdate)
-					}
-			} else {
-				WannaHomeKt.logger.error { "冰音获取错误：Code:${resWH.code}\nBody:${strWH}" }
+			val startTimeStamp = Calendar.getInstance().timeInMillis
+			call(serverId).use { response ->
+				val str = response.body?.string() ?: ""
+				if (response.networkResponse != null) {
+					TimeMillis += Calendar.getInstance().timeInMillis - startTimeStamp
+
+					if (response.headers["last-modified"] != null)
+						LastModified = response.headers["last-modified"]!!
+				}
+				if (response.isSuccessful && str.isNotEmpty()) {
+					val saleList = jsonDecoder.decodeFromString<ServerData>(str)
+					if (saleList.LastUpdate >= thisTurnStart)
+						saleList.OnSale.forEach {
+							voteInfoMap["$serverId-${it.TerritoryId}-${it.WardId}-${it.HouseId}"] =
+								PlotInfo(serverId, it.TerritoryId, it.WardId, it.HouseId, it.Size - 1, saleList.LastUpdate)
+						}
+				} else {
+					WannaHomeKt.logger.error { "冰音获取错误：Code:${response.code}\nBody:${str}" }
+				}
 			}
 		} catch (e: Exception) {
 			WannaHomeKt.logger.error { "冰音获取错误：$e\n${e.stackTraceToString()}" }
@@ -120,4 +154,5 @@ class HouseInfo : VoteInfoOperate {
 			)
 		}
 	}
+
 }
