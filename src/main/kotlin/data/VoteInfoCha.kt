@@ -14,13 +14,13 @@ import kotlinx.serialization.json.Json
 import net.mamoe.mirai.console.data.AutoSavePluginData
 import net.mamoe.mirai.console.data.value
 import net.mamoe.mirai.utils.error
-import okhttp3.CacheControl
+import net.mamoe.mirai.utils.info
 import okhttp3.Call
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
+import java.text.SimpleDateFormat
 import java.util.*
-import java.util.concurrent.TimeUnit
 
 class VoteInfoCha : VoteInfoOperate {
 
@@ -39,7 +39,9 @@ class VoteInfoCha : VoteInfoOperate {
 		private const val HomeUrl = "https://home-api.iinformation.info/v2/data/"
 		private fun newRequest(serverId: Int): Request {
 			return Request.Builder().url(HomeUrl + serverId).get()
-				.cacheControl(CacheControl.Builder().maxAge(1, TimeUnit.MINUTES).build()).run {
+				//.cacheControl(CacheControl.Builder().maxAge(1, TimeUnit.MINUTES).noCache().build())
+				.header("Cache-Control", "public, no-cache")
+				.run {
 					if (LastModified.isNotEmpty())
 						this.addHeader("If-Modified-Since", LastModified)
 					this
@@ -77,7 +79,7 @@ class VoteInfoCha : VoteInfoOperate {
 	}
 
 	override suspend fun run(serverId: Int, lastTurnStart: Long, thisTurnStart: Long): Map<String, PlotInfo> {
-		//WannaHomeKt.logger.info { "开始获取猹：${SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(Calendar.getInstance().time.time)}" }
+		WannaHomeKt.logger.info { "开始获取猹：${SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(Calendar.getInstance().time.time)}" }
 
 		val voteInfoMap = mutableMapOf<String, PlotInfo>()
 		try {
@@ -115,7 +117,7 @@ class VoteInfoCha : VoteInfoOperate {
 		} catch (e: Exception) {
 			WannaHomeKt.logger.error { "猹获取错误：$e\n${e.stackTraceToString()}" }
 		}
-		//WannaHomeKt.logger.info { "结束获取猹：${SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(Calendar.getInstance().time.time)}" }
+		WannaHomeKt.logger.info { "结束获取猹：${SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(Calendar.getInstance().time.time)}" }
 		return voteInfoMap
 	}
 

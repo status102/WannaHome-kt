@@ -17,6 +17,7 @@ import net.mamoe.mirai.console.data.AutoSavePluginData
 import net.mamoe.mirai.console.data.value
 import net.mamoe.mirai.console.plugin.jvm.JvmPluginDescription
 import net.mamoe.mirai.console.plugin.jvm.KotlinPlugin
+import net.mamoe.mirai.contact.Group
 import net.mamoe.mirai.contact.MessageTooLargeException
 import net.mamoe.mirai.contact.nameCardOrNick
 import net.mamoe.mirai.contact.remarkOrNameCardOrNick
@@ -131,7 +132,6 @@ object WannaHomeKt : KotlinPlugin(
 			//BOT被取消禁言
 			this.message.forEach {
 				if (it is PlainText) {
-					logger.info { it.content }
 					if (it.content == "/空地") {
 						WannaCommand.handle(Cont(this.message, toCommandSender()))
 					} else if (it.content == "/空地 简称") {
@@ -143,7 +143,7 @@ object WannaHomeKt : KotlinPlugin(
 						val serverList = mutableListOf<String>()
 						val limitStr = StringBuilder()
 						word.forEach { str ->
-							if (regex.matches(str)) {
+							if (regex.containsMatchIn(str)) {
 								val result = regex.findAll(str)
 								result.forEach {
 									serverList.add(it.value)
@@ -176,7 +176,7 @@ class Cont(override val originalMessage: MessageChain, override val sender: Comm
 
 
 object TestCommand : SimpleCommand(
-	WannaHomeKt, "WannaHome", description = "示例指令"
+	WannaHomeKt, "wh","WannaHome", description = "示例指令"
 ) {
 	@Handler
 	suspend fun handle(commandContext: CommandContext) {
@@ -199,7 +199,27 @@ object TestCommand : SimpleCommand(
 		}
 		canvas.close()
 		bitmap.close()*/
-		println((serverMap.keys + subNameMap.keys).joinTo(StringBuilder(), "|"))
+		//println((serverMap.keys + subNameMap.keys).joinTo(StringBuilder(), "|"))
+/*
+		val word = "海猫紫水".split(" ")
+		val regex = Regex((serverMap.keys + subNameMap.keys).joinTo(StringBuilder(), "|","(",")").toString())
+		val serverList = mutableListOf<String>()
+		val limitStr = StringBuilder()
+		word.forEach { str ->
+			if (regex.containsMatchIn(str)) {
+				println("匹配证实")
+				val result = regex.findAll(str)
+				result.forEach {
+					it.value
+					println(it.value)
+
+				}
+				println("限制：${str.replace(regex, "")}")
+				//limitStr.append(regex.replace(str, ""))
+			}
+		}*/
+		//WannaCommand.handle(Cont(this.message, toCommandSender()), serverList, limitStr.toString())
+
 		//val str = StringBuilder()
 		//sendMessage(str.toString().trimEnd('\n'))
 	}
@@ -288,8 +308,7 @@ object WannaCommand : SimpleCommand(
 		val output = StringBuilder()
 		output.appendLine("使用方法：")
 		output.appendLine("/空地：获取基本使用方法")
-		output.appendLine("/空地 <服务器/大区名>：获取服务器空地信息")
-		output.appendLine("/空地 <服务器/大区名> <S|M|L|海|森|白|沙|雪|个人|部队|准备>：筛选服务器空地信息")
+		output.appendLine("/空地 <服务器/大区名/SML|海|森|白|沙|雪|个人|部队|准备>：获取服务器空地信息")
 		output.appendLine("/空地 简称：获取服务器简称列表")
 		output.appendLine()
 		output.appendLine(String.format("今日为第%d轮%d天", turn, diff % 9 + 1))
@@ -355,13 +374,8 @@ object WannaCommand : SimpleCommand(
 				add(Calendar.DAY_OF_MONTH, turn * 9)
 		}
 		val nextEventTimeStr = String.format("%d号%02d点", nextEventTime.get(Calendar.DAY_OF_MONTH), nextEventTime.get(Calendar.HOUR_OF_DAY))
-		commandContext.sender.getGroupOrNull()?.botAsMember?.apply {
-			nameCard = nameCard.replace(Regex("【.+?(】|$)"), "").let {
-				if (it.isEmpty() || it.isBlank())
-					nick
-				else
-					it
-			} + "【${if (!canEntry) "下轮开始" else "本轮公示"}${nextEventTimeStr}】"
+		commandContext.sender.getGroupOrNull()?.run{
+			changeBotGroupNameCard(this, canEntry, nextEventTimeStr)
 		}
 		val output = getServerData(commandContext.sender.getGroupOrNull()?.id, search, realName, size.uppercase(Locale.getDefault())) { i, _ -> i >= 30 }.trimEnd('\n')
 		runBlocking {
@@ -399,8 +413,9 @@ object WannaCommand : SimpleCommand(
 		//if (subNameMap.containsKey(serverName)) serverName = subNameMap[serverName].toString()
 		//val realName = serverName
 		//if (serverIdMap.containsKey(serverName)) serverName = serverIdMap[serverName].toString()
-		val realName = "${serverList.size}个服"
-		val search = serverList.fold(mutableListOf<Int>()) { sum, element -> (sum + serverOrDcNickNameToServerName(element).map { serverIdMap[it] ?: 0 }.toSet().filter { it > 0 }.toMutableList()).toMutableList() }
+		//val realName = "${serverList.size}个服"
+		val search = serverList.fold(mutableListOf<Int>()) { sum, element -> (sum + serverOrDcNickNameToServerName(element).map { serverIdMap[it] ?: 0 }.filter { it > 0 }).toMutableList() }.toSet().toList()
+		val realName = "${search.size}个服"
 
 		val now = Calendar.getInstance().timeInMillis
 		val start = Calendar.getInstance().apply { time = strTimeToDate("2022-08-08 23:00:00") }
@@ -415,13 +430,8 @@ object WannaCommand : SimpleCommand(
 				add(Calendar.DAY_OF_MONTH, turn * 9)
 		}
 		val nextEventTimeStr = String.format("%d号%02d点", nextEventTime.get(Calendar.DAY_OF_MONTH), nextEventTime.get(Calendar.HOUR_OF_DAY))
-		commandContext.sender.getGroupOrNull()?.botAsMember?.apply {
-			nameCard = nameCard.replace(Regex("【.+?(】|$)"), "").let {
-				if (it.isEmpty() || it.isBlank())
-					nick
-				else
-					it
-			} + "【${if (!canEntry) "下轮开始" else "本轮公示"}${nextEventTimeStr}】"
+		commandContext.sender.getGroupOrNull()?.run{
+			changeBotGroupNameCard(this, canEntry, nextEventTimeStr)
 		}
 		val output = getServerData(commandContext.sender.getGroupOrNull()?.id, search, realName, size.uppercase(Locale.getDefault())) { i, _ -> i >= 30 }.trimEnd('\n')
 		runBlocking {
@@ -790,19 +800,23 @@ suspend fun sendNoteMessage() {
 		if (bot.isOnline && noteList.containsKey(bot.id)) {
 			noteList[bot.id]?.forEach {
 				bot.getGroup(it)?.run {
-					this.botAsMember.apply {
-						nameCard = nameCard.replace(Regex("【.+?(】|$)"), "").let { nameCard ->
-							if (nameCard.isEmpty() || nameCard.isBlank())
-								nick
-							else
-								nameCard
-						} + "【${if (!canEntry) "下轮开始" else "本轮公示"}${nextEventTimeStr}】"
-					}
+					changeBotGroupNameCard(this, canEntry, nextEventTimeStr)
 					sendMessage(output.toString().trimEnd('\n'))
 				}
 
 			}
 		}
+	}
+}
+
+fun changeBotGroupNameCard(group : Group, canEntry:Boolean, nextEventTimeStr:String ){
+	group.botAsMember.apply {
+		nameCard = nameCard.replace(Regex("【.+?(】|$)"), "").let { nameCard ->
+			if (nameCard.isEmpty() || nameCard.isBlank())
+				nick
+			else
+				nameCard
+		} + "【${if (!canEntry) "下轮抽奖" else "本轮公示"}${nextEventTimeStr}】"
 	}
 }
 
