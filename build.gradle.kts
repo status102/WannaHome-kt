@@ -1,12 +1,27 @@
+group = "cn.status102"
+version = "0.1.1"
+
+
+
 plugins {
 	val kotlinVersion = "1.7.10"
 	kotlin("jvm") version kotlinVersion
+	//kotlin("multiplatform") version "1.7.10"
 	kotlin("plugin.serialization") version kotlinVersion
+	//id("org.jetbrains.compose") version "1.1.0"
+	//kotlin("multiplatform") version "1.4.20"
+	//kotlin("multiplatform") version "1.7.10"
+	//kotlin("multiplatform") version "1.6.21"
+	//id("org.jetbrains.compose") version "1.3.0"
+	//id("org.jetbrains.compose") version "1.2.0-alpha01-dev709"
+	//id("org.jetbrains.compose") version "1.2.1-dev-k1.7.10-27cf0868d10"
+	//id("org.jetbrains.compose") version "1.2.0-beta01"
 	id("net.mamoe.mirai-console") version "2.12.0"
+	id("com.github.johnrengelman.shadow") version "7.1.2"
+	//id("org.jetbrains.compose") version "1.2.0-alpha01-dev741"
+	//id("me.him188.maven-central-publish") version "1.0.0-dev-3"
 }
 
-group = "cn.status102"
-version = "0.1.0"
 
 val osName: String = System.getProperty("os.name")
 val targetOs = when {
@@ -27,18 +42,40 @@ val skikoVersion = "0.7.32"
 val target = "${targetOs}-${targetArch}"
 
 dependencies {
-	implementation("org.jetbrains.skiko:skiko-awt-runtime-$target:$skikoVersion")
 	//implementation("org.jetbrains.skiko:skiko-awt-runtime-linux-x64:0.7.32")
-
-
-
+	//implementation("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.7.32")
+	implementation("org.jetbrains.skiko:skiko-awt-runtime-$target:$skikoVersion")
+	//shadowLink("org.jetbrains.skiko:skiko-awt-runtime-windows-x64")
 }
 
-repositories {
-	maven("https://maven.aliyun.com/repository/public")
-	mavenCentral()
-	maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
-}
 mirai {
 	jvmTarget = JavaVersion.VERSION_11
 }
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
+	kotlinOptions.jvmTarget = "11"
+}
+
+repositories {
+	google()
+	gradlePluginPortal()
+	mavenCentral()
+	mavenLocal()
+	maven("https://androidx.dev/storage/compose-compiler/repository/")
+	maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
+	//maven("https://maven.aliyun.com/repository/public")
+}
+/*
+buildscript {
+	repositories {
+		mavenLocal()
+		google()
+		mavenCentral()
+		maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
+	}
+
+	dependencies {
+		// __KOTLIN_COMPOSE_VERSION__
+		classpath(kotlin("gradle-plugin", version = "1.6.10"))
+	}
+}
+*/

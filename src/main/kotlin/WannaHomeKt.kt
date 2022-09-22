@@ -5,6 +5,7 @@ import cn.status102.data.HouseInfo
 import cn.status102.data.PlotInfo
 import cn.status102.data.VoteInfoCha
 import cn.status102.data.VoteInfoHouseHelper
+import io.ktor.utils.io.charsets.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import net.mamoe.mirai.Bot
@@ -26,6 +27,7 @@ import net.mamoe.mirai.event.events.*
 import net.mamoe.mirai.message.data.MessageChain
 import net.mamoe.mirai.message.data.MessageSource.Key.quote
 import net.mamoe.mirai.message.data.PlainText
+import net.mamoe.mirai.message.data.toMessageChain
 import net.mamoe.mirai.utils.ExternalResource.Companion.toExternalResource
 import net.mamoe.mirai.utils.ExternalResource.Companion.uploadAsImage
 import net.mamoe.mirai.utils.error
@@ -33,6 +35,7 @@ import net.mamoe.mirai.utils.info
 import okhttp3.Cache
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.jetbrains.skia.*
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -44,33 +47,35 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.roundToLong
+import kotlin.text.Charsets
 
-const val Limit_Person = 7
-const val Limit_FC = 5
-const val fcIdStart = 16//个人区1~16，对应ID 0~15
 
-val HouseDataList = listOf(HouseInfo(), VoteInfoCha(), VoteInfoHouseHelper())
+public const val Limit_Person = 7
+public const val Limit_FC = 5
+public const val fcIdStart = 16//个人区1~16，对应ID 0~15
+
+public val HouseDataList = listOf(HouseInfo(), VoteInfoCha(), VoteInfoHouseHelper())
 
 /**
  * 超过8小时数据未更新
  */
-const val outdatedWarn: Long = 8 * 60 * 60//
-const val outdatedWarnChar = "※"
-const val outdatedWarnTips = "未更新数据"
+public const val outdatedWarn: Long = 8 * 60 * 60//
+public const val outdatedWarnChar = "※"
+public const val outdatedWarnTips = "未更新数据"
 
-val showTipsGroup = setOf<Long>(
+public val showTipsGroup = setOf<Long>(
 	1074761017,//海猫房群
 	299803462,//琥珀房群
 )
 
 //region 缓存路径
-val cacheDir = File("${WannaHomeKt.dataFolderPath}${File.separatorChar}okhttpCache")
-val imageDir = File("${WannaHomeKt.dataFolderPath}${File.separatorChar}map")
-val client = OkHttpClient.Builder().cache(Cache(cacheDir, 100 * 1024 * 1024)).connectTimeout(30, TimeUnit.SECONDS).build()
+public val cacheDir = File("${WannaHomeKt.dataFolderPath}${File.separatorChar}okhttpCache")
+public val imageDir = File("${WannaHomeKt.dataFolderPath}${File.separatorChar}map")
+public val client = OkHttpClient.Builder().cache(Cache(cacheDir, 100 * 1024 * 1024)).connectTimeout(30, TimeUnit.SECONDS).build()
 
 //endregion
 
-object WannaHomeKt : KotlinPlugin(
+public object WannaHomeKt : KotlinPlugin(
 	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.1.1")
 	{
 		author("status102")
@@ -86,6 +91,13 @@ object WannaHomeKt : KotlinPlugin(
 		SubNameCommand.register()
 		TestCommand.register()
 		MapCommand.register()
+
+		WannaHomeKt::class.java.getResourceAsStream("/Microsoft_YaHei_UI_Light.tff").use {
+			if(it == null)
+				println("null！！！！")
+			else
+			logger.info { "字体大小：" + it.readAllBytes().size }
+		}
 		logger.info { "Plugin loaded" }
 		val eventChannel = GlobalEventChannel.parentScope(this)
 
@@ -106,7 +118,6 @@ object WannaHomeKt : KotlinPlugin(
 		eventChannel.subscribeAlways<BotLeaveEvent> {
 			if (this is BotLeaveEvent.Kick) {
 				this.bot.getFriend(3122262428)?.sendMessage("Bot被${operator.remarkOrNameCardOrNick}[${operator.id}]踢出了${group.name}[${group.id}]")
-
 				//自动同意加群申请
 				/*Bot.instances.forEach {
 					it.getFriend(3122262428)?.sendMessage("Bot被${operator.remarkOrNameCardOrNick}[${operator.id}]踢出了${group.name}[${group.id}]")
@@ -136,8 +147,7 @@ object WannaHomeKt : KotlinPlugin(
 						WannaCommand.handle(Cont(this.message, toCommandSender()))
 					} else if (it.content == "/空地 简称") {
 						WannaCommand.sendServerNickName(Cont(this.message, toCommandSender()))
-					}
-					else if (it.content.startsWith("/空地 ")) {
+					} else if (it.content.startsWith("/空地 ")) {
 						val word = it.content.substring(4).split(" ")
 						val regex = Regex((serverMap.keys + subNameMap.keys).joinTo(StringBuilder(), "|").toString())
 						val serverList = mutableListOf<String>()
@@ -149,7 +159,8 @@ object WannaHomeKt : KotlinPlugin(
 									serverList.add(it.value)
 								}
 								limitStr.append(regex.replace(str, ""))
-							}
+							} else
+								limitStr.append(regex.replace(str, ""))
 						}
 						WannaCommand.handle(Cont(this.message, toCommandSender()), serverList, limitStr.toString())
 					}
@@ -172,52 +183,100 @@ object WannaHomeKt : KotlinPlugin(
 	}
 }
 
-class Cont(override val originalMessage: MessageChain, override val sender: CommandSender) : CommandContext
+public class Cont(override val originalMessage: MessageChain, override val sender: CommandSender) : CommandContext
 
+/*
+public fun pornhub(porn: String = "Porn", hub: String = "Hub"): Surface {
+	val font = Font(FontUtils.matchArial(FontStyle.BOLD), 90F)
+	val prefix = TextLine.make(porn, font)
+	val suffix = TextLine.make(hub, font)
+	val black = Paint().setARGB(0xFF, 0x00, 0x00, 0x00)
+	val white = Paint().setARGB(0xFF, 0xFF, 0xFF, 0xFF)
+	val yellow = Paint().setARGB(0xFF, 0xFF, 0x90, 0x00)
 
-object TestCommand : SimpleCommand(
-	WannaHomeKt, "wh","WannaHome", description = "示例指令"
+	val surface = Surface.makeRasterN32Premul((prefix.width + suffix.width + 50).toInt(), (suffix.height + 40).toInt())
+	surface.canvas {
+		clear(black.color)
+		drawTextLine(prefix, 10F, 20 - font.metrics.ascent, white)
+		drawRRect(RRect.makeXYWH(prefix.width + 15, 15F, suffix.width + 20, suffix.height + 10, 10F), yellow)
+		drawTextLine(suffix, prefix.width + 25, 20 - font.metrics.ascent, black)
+	}
+
+	return surface
+}
+*/
+public object TestCommand : SimpleCommand(
+	WannaHomeKt, "wh", "WannaHome", description = "示例指令"
 ) {
 	@Handler
-	suspend fun handle(commandContext: CommandContext) {
-		/*
+	public suspend fun handle(commandContext: CommandContext) {
+
+		val t = "测试输出"
+		val utf8: String = String(t.toByteArray(charset("UTF-8")))
+		println(utf8)
+		val unicode = String(utf8.toByteArray(), Charsets.UTF_8)
+		println(unicode)
+		val gbk = String(unicode.toByteArray(charset("GBK")))
 		val bitmap = Bitmap().apply {
-			allocN32Pixels(1200, 1800)
+			allocN32Pixels(120, 180)
 
 		}
-		val canvas = Canvas(bitmap)
+		val font = Font(FontMgr.default.matchFamilyStyle("宋体", FontStyle.NORMAL))
+		//val font = Font(Typeface.makeFromName("SimSun", FontStyle.NORMAL))
+		font.size = 12f
 
-		canvas.drawString("测试输出", 100.0f, 200f, Font(), Paint().apply { setARGB(255, 255, 0, 0) })
-		Image.makeFromBitmap(bitmap).encodeToData()?.bytes?.inputStream()?.toExternalResource()?.use {
-			if (commandContext.sender.subject != null) {
-				val image = it.uploadAsImage(commandContext.sender.subject!!)
-				if (commandContext.sender.isNotConsole())
-					commandContext.sender.sendMessage(commandContext.originalMessage.quote() + image)
-				else
-					commandContext.sender.sendMessage(image)
+		Typeface.makeFromName("SimSun", FontStyle.NORMAL).familyNames.forEach {
+			WannaHomeKt.logger.info { "字符集：${it.name}<${it.language}>" }
+		}
+		val prefix = TextLine.make(unicode, font)
+		val suffix = TextLine.make("(TestOutput)", font)
+		val surface = Surface.makeRasterN32Premul((prefix.width + suffix.width + 50).toInt(), (suffix.height + 40).toInt())
+		//val surface = Surface()
+		surface.canvas.run {
+			val black = Paint().setARGB(0xFF, 0x00, 0x00, 0x00)
+			val white = Paint().setARGB(0xFF, 0xFF, 0xFF, 0xFF)
+			val yellow = Paint().setARGB(0xFF, 0xFF, 0x90, 0x00)
+			clear(black.color)
+			drawTextLine(prefix, 10F, 20 - font.metrics.ascent, white)
+			drawRRect(RRect.makeXYWH(prefix.width + 15, 15F, suffix.width + 20, suffix.height + 10, 5F), yellow)
+			drawTextLine(suffix, prefix.width + 25, 20 - font.metrics.ascent, black)
+
+		}
+		surface.makeImageSnapshot().encodeToData()?.use {
+			//File("C:\\Users\\status102\\Desktop\\latest.png").writeBytes(it.bytes)
+		}
+		surface.makeImageSnapshot().encodeToData()?.use {
+			WannaHomeKt.logger.info { "大小：${it.size}" }
+			it.bytes.inputStream().toExternalResource().use {
+				if (commandContext.sender.subject != null) {
+					val image = it.uploadAsImage(commandContext.sender.subject!!)
+					if (commandContext.sender.isNotConsole())
+						commandContext.sender.sendMessage(commandContext.originalMessage.quote() + image)
+					else
+						commandContext.sender.sendMessage("控制台：" + image.toMessageChain().contentToString())
+				}
+			}
+		}
+
+		val canvas = Canvas(bitmap)
+		canvas.drawString("测试输出(test)", 10.0f, 30f, font, Paint().setARGB(255, 255, 0, 0))
+		Image.makeFromBitmap(bitmap).encodeToData()?.use {
+			WannaHomeKt.logger.info { "大小：${it.size}" }
+			it.bytes.inputStream().toExternalResource().use {
+				if (commandContext.sender.subject != null) {
+					val image = it.uploadAsImage(commandContext.sender.subject!!)
+					if (commandContext.sender.isNotConsole())
+						commandContext.sender.sendMessage(commandContext.originalMessage.quote() + image)
+					else
+						commandContext.sender.sendMessage("控制台：" + image.toMessageChain().contentToString())
+				}
 			}
 		}
 		canvas.close()
-		bitmap.close()*/
-		//println((serverMap.keys + subNameMap.keys).joinTo(StringBuilder(), "|"))
-/*
-		val word = "海猫紫水".split(" ")
-		val regex = Regex((serverMap.keys + subNameMap.keys).joinTo(StringBuilder(), "|","(",")").toString())
-		val serverList = mutableListOf<String>()
-		val limitStr = StringBuilder()
-		word.forEach { str ->
-			if (regex.containsMatchIn(str)) {
-				println("匹配证实")
-				val result = regex.findAll(str)
-				result.forEach {
-					it.value
-					println(it.value)
+		bitmap.close()
 
-				}
-				println("限制：${str.replace(regex, "")}")
-				//limitStr.append(regex.replace(str, ""))
-			}
-		}*/
+		WannaHomeKt.logger.info { "默认字符集：" + Charset.defaultCharset() }
+		//println((serverMap.keys + subNameMap.keys).joinTo(StringBuilder(), "|"))
 		//WannaCommand.handle(Cont(this.message, toCommandSender()), serverList, limitStr.toString())
 
 		//val str = StringBuilder()
@@ -225,7 +284,7 @@ object TestCommand : SimpleCommand(
 	}
 }
 
-object SubNameCommand : CompositeCommand(
+public object SubNameCommand : CompositeCommand(
 	WannaHomeKt, "服务器简称", "简称", "缩写"
 ) {
 	@SubCommand("list")
@@ -258,7 +317,7 @@ object SubNameCommand : CompositeCommand(
 	}
 }
 
-object ServerListCommand : CompositeCommand(
+public object ServerListCommand : CompositeCommand(
 	WannaHomeKt, "服务器列表"
 ) {
 	@SubCommand("list")
@@ -271,7 +330,7 @@ object ServerListCommand : CompositeCommand(
 	}
 }
 
-object TerritoryCommand : CompositeCommand(
+public object TerritoryCommand : CompositeCommand(
 	WannaHomeKt, "房区",
 ) {
 	@SubCommand("list")
@@ -284,7 +343,7 @@ object TerritoryCommand : CompositeCommand(
 	}
 }
 
-object WannaCommand : SimpleCommand(
+public object WannaCommand : SimpleCommand(
 	WannaHomeKt, "空房", description = "获取服务器空余地块"
 ) {
 	@Handler
@@ -374,7 +433,7 @@ object WannaCommand : SimpleCommand(
 				add(Calendar.DAY_OF_MONTH, turn * 9)
 		}
 		val nextEventTimeStr = String.format("%d号%02d点", nextEventTime.get(Calendar.DAY_OF_MONTH), nextEventTime.get(Calendar.HOUR_OF_DAY))
-		commandContext.sender.getGroupOrNull()?.run{
+		commandContext.sender.getGroupOrNull()?.run {
 			changeBotGroupNameCard(this, canEntry, nextEventTimeStr)
 		}
 		val output = getServerData(commandContext.sender.getGroupOrNull()?.id, search, realName, size.uppercase(Locale.getDefault())) { i, _ -> i >= 30 }.trimEnd('\n')
@@ -430,7 +489,7 @@ object WannaCommand : SimpleCommand(
 				add(Calendar.DAY_OF_MONTH, turn * 9)
 		}
 		val nextEventTimeStr = String.format("%d号%02d点", nextEventTime.get(Calendar.DAY_OF_MONTH), nextEventTime.get(Calendar.HOUR_OF_DAY))
-		commandContext.sender.getGroupOrNull()?.run{
+		commandContext.sender.getGroupOrNull()?.run {
 			changeBotGroupNameCard(this, canEntry, nextEventTimeStr)
 		}
 		val output = getServerData(commandContext.sender.getGroupOrNull()?.id, search, realName, size.uppercase(Locale.getDefault())) { i, _ -> i >= 30 }.trimEnd('\n')
@@ -664,7 +723,7 @@ object WannaCommand : SimpleCommand(
 	}
 }
 
-object MapCommand : SimpleCommand(
+public object MapCommand : SimpleCommand(
 	WannaHomeKt, "房区地图", "地图", description = "获取房区地图"
 ) {
 	@Handler
@@ -717,20 +776,20 @@ object MapCommand : SimpleCommand(
 	}
 }
 
-fun unixTimeToStr(num: Long, isMillis: Boolean = false): String {
+public fun unixTimeToStr(num: Long, isMillis: Boolean = false): String {
 	return SimpleDateFormat("YYYY-MM-dd HH:mm:ss").format(if (isMillis) num else (num * 1000))
 }
 
-fun unixMillisTimeToStr(num: Long): String {
+public fun unixMillisTimeToStr(num: Long): String {
 	return SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(num)
 }
 
-fun strTimeToDate(str: String): Date {
+public fun strTimeToDate(str: String): Date {
 	return SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(str)
 }
 
 @OptIn(DelicateCoroutinesApi::class)
-fun initSendNote() {
+public fun initSendNote() {
 	GlobalScope.launch {
 		while (true) {
 			val now = Calendar.getInstance().timeInMillis
@@ -756,7 +815,7 @@ fun initSendNote() {
 	}
 }
 
-suspend fun sendNoteMessage() {
+public suspend fun sendNoteMessage() {
 	if (Data.WannaHomeGroupList.isEmpty()) return
 	val now = Calendar.getInstance().timeInMillis / 1000
 	val start = Calendar.getInstance().apply { time = strTimeToDate("2022-08-08 23:00:00") }
@@ -809,7 +868,7 @@ suspend fun sendNoteMessage() {
 	}
 }
 
-fun changeBotGroupNameCard(group : Group, canEntry:Boolean, nextEventTimeStr:String ){
+public fun changeBotGroupNameCard(group: Group, canEntry: Boolean, nextEventTimeStr: String) {
 	group.botAsMember.apply {
 		nameCard = nameCard.replace(Regex("【.+?(】|$)"), "").let { nameCard ->
 			if (nameCard.isEmpty() || nameCard.isBlank())
@@ -820,22 +879,22 @@ fun changeBotGroupNameCard(group : Group, canEntry:Boolean, nextEventTimeStr:Str
 	}
 }
 
-fun strTimeToUnix(str: String): Long {
+public fun strTimeToUnix(str: String): Long {
 	return strTimeToDate(str).time / 1000
 }
 
-fun strTimeToUnixMillis(str: String): Long {
+public fun strTimeToUnixMillis(str: String): Long {
 	return strTimeToDate(str).time
 }
 
-val groupListLock = Any()
+public val groupListLock = Any()
 
-object Data : AutoSavePluginData("Data") {
-	var WannaHomeGroupList by value(mutableSetOf<String>())
+public object Data : AutoSavePluginData("Data") {
+	public var WannaHomeGroupList by value(mutableSetOf<String>())
 }
 
-object Config : AutoSavePluginConfig("Config") {
-	var subNameMap by value(
+public object Config : AutoSavePluginConfig("Config") {
+	public var subNameMap: MutableMap<String, String> by value(
 		mutableMapOf(
 			"海猫" to "海猫茶屋",
 			"柔风" to "柔风海湾",
@@ -853,7 +912,7 @@ object Config : AutoSavePluginConfig("Config") {
 }
 
 //region 房屋种类信息
-val Map_Url = mapOf(
+public val Map_Url: Map<String, String> = mapOf(
 	"沙" to "https://huiji-public.huijistatic.com/ff14/uploads/3/31/高脚孤丘房屋等级及尺寸示意图.jpg",
 	"沙扩" to "https://huiji-public.huijistatic.com/ff14/uploads/a/a0/高脚孤丘扩建区房屋等级及尺寸示意图.jpg",
 	"森" to "https://huiji-public.huijistatic.com/ff14/uploads/0/03/薰衣草苗圃房屋等级及尺寸示意图.jpg",
@@ -869,7 +928,7 @@ val Map_Url = mapOf(
 /**
  * name to ID
  */
-val serverIdMap = mapOf(
+public val serverIdMap: Map<String, Int> = mapOf(
 	"拉诺西亚" to 1042,
 	"幻影群岛" to 1044,
 	"萌芽池" to 1060,
@@ -899,16 +958,16 @@ val serverIdMap = mapOf(
 	"伊修加德" to 1186,
 	"红茶川" to 1201
 )
-val serverNameMap by lazy {
+public val serverNameMap: Map<Int, String> by lazy {
 	serverIdMap.mapValues { it.key }.mapKeys { serverIdMap[it.key]!! }
 }
-val serverMap = mapOf(
+public val serverMap: Map<String, List<String>> = mapOf(
 	"陆行鸟" to listOf("鸟"), "莫古力" to listOf("猪"), "猫小胖" to listOf("猫"), "豆豆柴" to listOf("狗"),
 	"鸟" to listOf("拉诺西亚", "幻影群岛", "神意之地", "萌芽池", "红玉海", "宇宙和音", "沃仙曦染", "晨曦王座"),
 	"猪" to listOf("潮风亭", "神拳痕", "白银乡", "白金幻象", "旅人栈桥", "拂晓之间", "龙巢神殿", "梦羽宝境"),
 	"猫" to listOf("紫水栈桥", "延夏", "静语庄园", "摩杜纳", "海猫茶屋", "柔风海湾", "琥珀原"),
 	"狗" to listOf("水晶塔", "银泪湖", "太阳海岸", "伊修加德", "红茶川")
 )
-val territoryMap = mapOf(339 to "海", 340 to "森", 341 to "沙", 641 to "白", 979 to "雪")
-val sizeMap: List<String> = listOf("S", "M", "L")
+public val territoryMap: Map<Int, String> = mapOf(339 to "海", 340 to "森", 341 to "沙", 641 to "白", 979 to "雪")
+public val sizeMap: List<String> = listOf("S", "M", "L")
 //endregion

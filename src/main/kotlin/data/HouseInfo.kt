@@ -6,6 +6,7 @@ import cn.status102.client
 import cn.status102.data.HouseInfo.Companion.Logger.CallTimes
 import cn.status102.data.HouseInfo.Companion.Logger.FailTimes
 import cn.status102.data.HouseInfo.Companion.Logger.TimeMillis
+import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -49,7 +50,7 @@ class HouseInfo : VoteInfoOperate {
 			return client.newCall(newRequest(serverId))
 		}
 
-		fun call(serverId: Int, reCallTimes: Int = 0, reCallTimesLimit: Int = 3): Response {
+		suspend  fun call(serverId: Int, reCallTimes: Int = 0, reCallTimesLimit: Int = 3): Response {
 			try {
 				return newCall(serverId).execute().apply {
 					if (networkResponse != null)
@@ -59,6 +60,7 @@ class HouseInfo : VoteInfoOperate {
 				if (reCallTimes < reCallTimesLimit) {
 					CallTimes++
 					FailTimes++
+					delay(1000)
 					WannaHomeKt.logger.error { "冰音获取错误：$e\n${e.stackTraceToString()}" }
 					return call(serverId, reCallTimes + 1)
 				}
