@@ -1,11 +1,9 @@
 package cn.status102
 
 import cn.status102.Config.subNameMap
-import cn.status102.data.HouseInfo
-import cn.status102.data.PlotInfo
-import cn.status102.data.VoteInfoCha
-import cn.status102.data.VoteInfoHouseHelper
-import io.ktor.utils.io.charsets.*
+import cn.status102.data.*
+import io.github.g0dkar.qrcode.QRCode
+import io.github.g0dkar.qrcode.render.Colors
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import net.mamoe.mirai.Bot
@@ -47,19 +45,24 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.roundToLong
-import kotlin.text.Charsets
+import kotlin.random.Random
 
 
-public const val Limit_Person = 7
-public const val Limit_FC = 5
+public val Limit_Person = 15..30
+public val Limit_FC = 15..30
 public const val fcIdStart = 16//个人区1~16，对应ID 0~15
+val Merge_Left = 10F
+val Merge_Right = 10F
+val Merge_Up = 10F
+val Merge_Down = 10F
+val Merge_Mid = 20F
 
 public val HouseDataList = listOf(HouseInfo(), VoteInfoCha(), VoteInfoHouseHelper())
 
 /**
  * 超过8小时数据未更新
  */
-public const val outdatedWarn: Long = 8 * 60 * 60//
+public const val outdatedWarn: Long = 12 * 60 * 60//
 public const val outdatedWarnChar = "※"
 public const val outdatedWarnTips = "未更新数据"
 
@@ -74,6 +77,7 @@ public val imageDir = File("${WannaHomeKt.dataFolderPath}${File.separatorChar}ma
 public val client = OkHttpClient.Builder().cache(Cache(cacheDir, 100 * 1024 * 1024)).connectTimeout(30, TimeUnit.SECONDS).build()
 
 //endregion
+var font: Font? = null
 
 public object WannaHomeKt : KotlinPlugin(
 	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.1.1")
@@ -92,24 +96,27 @@ public object WannaHomeKt : KotlinPlugin(
 		TestCommand.register()
 		MapCommand.register()
 
-		WannaHomeKt::class.java.getResourceAsStream("/Microsoft_YaHei_UI_Light.tff").use {
-			if(it == null)
-				println("null！！！！")
-			else
-			logger.info { "字体大小：" + it.readAllBytes().size }
+		WannaHomeKt::class.java.getResourceAsStream("/Microsoft_YaHei_UI_Light.ttf")?.use {
+			val dataFile = File(WannaHomeKt.dataFolderPath.toFile(), "Microsoft_YaHei_UI_Light.ttf")
+			dataFile.writeBytes(it.readAllBytes())
+			logger.info { "加载附带字体：" + File(WannaHomeKt.dataFolderPath.toFile(), "Microsoft_YaHei_UI_Light.ttf").toString() }
+			font = Font(Typeface.makeFromFile(File(WannaHomeKt.dataFolderPath.toFile(), "Microsoft_YaHei_UI_Light.ttf").toString()))
 		}
+
 		logger.info { "Plugin loaded" }
 		val eventChannel = GlobalEventChannel.parentScope(this)
 
 		eventChannel.subscribeAlways<NewFriendRequestEvent> {
-			this.bot.getFriend(3122262428)?.sendMessage("${fromNick}[${fromId}]发来的好友申请：${message}")
+			if (this.bot.id == 3165860596)
+				this.bot.getFriend(3122262428)?.sendMessage("${fromNick}[${fromId}]发来的好友申请：${message}")
 			//自动同意好友申请
 			/*Bot.instances.forEach {
 				it.getFriend(3122262428)?.sendMessage("${fromNick}[${fromId}]发来的好友申请：${message}")
 			}*/
 		}
 		eventChannel.subscribeAlways<BotInvitedJoinGroupRequestEvent> {
-			this.bot.getFriend(3122262428)?.sendMessage("${invitorNick}[${invitorId}]邀请加入${this.groupName}[${this.groupId}]")
+			if (this.bot.id == 3165860596)
+				this.bot.getFriend(3122262428)?.sendMessage("${invitorNick}[${invitorId}]邀请加入${this.groupName}[${this.groupId}]")
 			//自动同意加群申请
 			/*Bot.instances.forEach {
 				it.getFriend(3122262428)?.sendMessage("${invitorNick}[${invitorId}]邀请加入${this.groupName}[${this.groupId}]")
@@ -117,7 +124,8 @@ public object WannaHomeKt : KotlinPlugin(
 		}
 		eventChannel.subscribeAlways<BotLeaveEvent> {
 			if (this is BotLeaveEvent.Kick) {
-				this.bot.getFriend(3122262428)?.sendMessage("Bot被${operator.remarkOrNameCardOrNick}[${operator.id}]踢出了${group.name}[${group.id}]")
+				if (this.bot.id == 3165860596)
+					this.bot.getFriend(3122262428)?.sendMessage("Bot被${operator.remarkOrNameCardOrNick}[${operator.id}]踢出了${group.name}[${group.id}]")
 				//自动同意加群申请
 				/*Bot.instances.forEach {
 					it.getFriend(3122262428)?.sendMessage("Bot被${operator.remarkOrNameCardOrNick}[${operator.id}]踢出了${group.name}[${group.id}]")
@@ -125,7 +133,8 @@ public object WannaHomeKt : KotlinPlugin(
 			}
 		}
 		eventChannel.subscribeAlways<BotMuteEvent> {
-			this.bot.getFriend(3122262428)?.sendMessage("${operator.remarkOrNameCardOrNick}[${operator.id}]在${group.name}[${group.id}]禁言了bot，时长：" + String.format("%d day %d:%02d:%02d", durationSeconds / 24 / 3600, (durationSeconds / 3600) % 24, (durationSeconds / 60) % 60, durationSeconds % 60))
+			if (this.bot.id == 3165860596)
+				this.bot.getFriend(3122262428)?.sendMessage("${operator.remarkOrNameCardOrNick}[${operator.id}]在${group.name}[${group.id}]禁言了bot，时长：" + String.format("%d day %d:%02d:%02d", durationSeconds / 24 / 3600, (durationSeconds / 3600) % 24, (durationSeconds / 60) % 60, durationSeconds % 60))
 
 			//BOT被禁言
 			/*Bot.instances.forEach {
@@ -133,7 +142,8 @@ public object WannaHomeKt : KotlinPlugin(
 			}*/
 		}
 		eventChannel.subscribeAlways<BotUnmuteEvent> {
-			this.bot.getFriend(3122262428)?.sendMessage("${operator.nameCardOrNick}[${operator.id}]在${group.name}[${group.id}]取消禁言了bot")
+			if (this.bot.id == 3165860596)
+				this.bot.getFriend(3122262428)?.sendMessage("${operator.nameCardOrNick}[${operator.id}]在${group.name}[${group.id}]取消禁言了bot")
 			//BOT被取消禁言
 			/*Bot.instances.forEach {
 				it.getFriend(3122262428)?.sendMessage("${operator.nameCardOrNick}[${operator.id}]在${group.name}[${group.id}]取消禁言了bot")
@@ -148,21 +158,7 @@ public object WannaHomeKt : KotlinPlugin(
 					} else if (it.content == "/空地 简称") {
 						WannaCommand.sendServerNickName(Cont(this.message, toCommandSender()))
 					} else if (it.content.startsWith("/空地 ")) {
-						val word = it.content.substring(4).split(" ")
-						val regex = Regex((serverMap.keys + subNameMap.keys).joinTo(StringBuilder(), "|").toString())
-						val serverList = mutableListOf<String>()
-						val limitStr = StringBuilder()
-						word.forEach { str ->
-							if (regex.containsMatchIn(str)) {
-								val result = regex.findAll(str)
-								result.forEach {
-									serverList.add(it.value)
-								}
-								limitStr.append(regex.replace(str, ""))
-							} else
-								limitStr.append(regex.replace(str, ""))
-						}
-						WannaCommand.handle(Cont(this.message, toCommandSender()), serverList, limitStr.toString())
+						getEmptyPlace(Cont(this.message, toCommandSender()), it.content.substring(4))
 					}
 				}
 			}
@@ -181,6 +177,35 @@ public object WannaHomeKt : KotlinPlugin(
 		TestCommand.unregister()
 		super.onDisable()
 	}
+}
+
+suspend fun getEmptyPlace(commandContext: CommandContext, ss: String) {
+	val word = ss.split(' ')
+	val regex = Regex((serverMap.keys + subNameMap.keys + serverIdMap.keys).joinTo(StringBuilder(), "|").toString())
+	val serverList = mutableListOf<String>()
+	val limitStr = StringBuilder()
+	word.forEach { str ->
+		if ((serverMap.keys + subNameMap.keys + serverIdMap.keys).contains(str)) {
+			serverList.add(str)
+		} else if (regex.containsMatchIn(str)) {
+			val result = regex.findAll(str)
+			result.forEach {
+				serverList.add(it.value)
+			}
+			limitStr.append(str.replace(regex, ""))
+		} else {
+			val filter = serverIdMap.keys.filter { it.contains(str) }
+			if (ss.length >= 2 && filter.size == 1) {
+				if (commandContext.sender.isNotConsole())
+					commandContext.sender.sendMessage(commandContext.originalMessage.quote() + "未知服务器，推测为：${filter[0]}")
+				else
+					println("未知服务器，推测为：${filter[0]}")
+				serverList.add(filter[0])
+			} else
+				limitStr.append(str)
+		}
+	}
+	WannaCommand.handle(commandContext, serverList, limitStr.toString())
 }
 
 public class Cont(override val originalMessage: MessageChain, override val sender: CommandSender) : CommandContext
@@ -205,46 +230,241 @@ public fun pornhub(porn: String = "Porn", hub: String = "Hub"): Surface {
 	return surface
 }
 */
+
+fun trans(nowTimeStamp: Long, outdatedLimit: Long, showServerName: Boolean): (PlotInfo) -> String =
+	{ sale ->
+		val output = StringBuilder()
+		if (sale.SaleState == 1 && nowTimeStamp - sale.Update >= outdatedLimit)
+			output.append(outdatedWarnChar)
+		output.append(String.format("[%s %s%s%02d-%02d]", sizeMap[sale.Size], if (showServerName) "${serverNameMap[sale.ServerId]?.substring(0, 2)} " else "", territoryMap[sale.TerritoryId], sale.WardId + 1, sale.HouseId + 1))
+		if (sale.SaleState in 1..2)
+			output.append(String.format(" 参与:%,d人", sale.VoteCount))
+		if (sale.SaleState == 2)
+			output.append(String.format("(中奖%,d号)", sale.WinnerIndex))
+		if (sale.SaleState == 3)
+			output.append(" 准备中")
+		output.toString()
+	}
+
+suspend fun getPic(serverName: String, searchList: List<Int>, groupId: Long = 0, limitStr: String): Surface {
+
+	val now = Calendar.getInstance().timeInMillis / 1000
+	val start = Calendar.getInstance().apply { time = strTimeToDate("2022-08-08 23:00:00") }
+	val diff = floor((now - start.timeInMillis / 1000) / 60.0 / 60 / 24).toInt()
+	val turn = diff / 9 + 1
+	val canEntry = (diff % 9) < 5
+	val lastTurnStart = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, (turn - 2) * 9) }.timeInMillis / 1000
+	val thisTurnStart = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, (turn - 1) * 9) }.timeInMillis / 1000
+	val thisTurnShow = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, (turn - 1) * 9 + 5) }.timeInMillis / 1000
+	val nextEventTime = (start.clone() as Calendar).apply {
+		if (canEntry)
+			add(Calendar.DAY_OF_MONTH, ((turn - 1) * 9 + 5))
+		else
+			add(Calendar.DAY_OF_MONTH, turn * 9)
+	}
+	val plotInfoMap = mutableMapOf<String, PlotInfo>()
+
+	val channel = WannaCommand.getHouseData(searchList, lastTurnStart, thisTurnStart)
+	val successCount = MutableList(HouseDataList.size) { 0 }
+	repeat(HouseDataList.size * searchList.size) {
+		channel.receive().run {
+			if (second) successCount[HouseDataList.indexOfFirst { it::class == first::class }]++
+			third.forEach { (key, it) ->
+				//if(it.WardId == 16 && it.HouseId == 35)
+				//WannaHomeKt.logger.info{"临时测试：${it.TerritoryId} ${it.WardId + 1}-${it.HouseId + 1} ${it.SaleState}(${it.VoteCount}/${it.WinnerIndex})：${unixTimeToStr(it.Update)}：${this.first.javaClass}"}
+				if (plotInfoMap.containsKey(key)) {
+					if (plotInfoMap[key]!!.SaleState == 0 ||
+						(it.Update > plotInfoMap[key]!!.Update &&
+								((it.Update >= thisTurnStart && plotInfoMap[key]!!.Update < thisTurnStart) || it.SaleState != 0))
+					) {
+						plotInfoMap[key]!!.VoteCount = it.VoteCount
+						plotInfoMap[key]!!.WinnerIndex = it.WinnerIndex
+						plotInfoMap[key]!!.SaleState = it.SaleState
+						plotInfoMap[key]!!.Update = it.Update
+					}
+				} else {
+					plotInfoMap[key] = it
+				}
+			}
+		}
+	}
+	channel.close()
+
+	val plotList = plotInfoMap.values.toMutableList()
+	val showServerName = searchList.size > 1
+
+	val font = Font(font?.typefaceOrDefault)
+	font.size = 24f
+
+	val black = Paint().setARGB(0xFF, 0x00, 0x00, 0x00)
+	val white = Paint().setARGB(0xFF, 0xFF, 0xFF, 0xFF)
+	val yellow = Paint().setARGB(0xFF, 0xFF, 0x90, 0x00)
+	val grey = Paint().setARGB(0x70, 0, 0, 0)
+
+
+	plotList.forEach {
+		if ((it.SaleState == 3 || (it.SaleState == 2 && it.WinnerIndex == 0)) && it.Update < thisTurnStart) {
+			it.Update = thisTurnStart
+			it.SaleState = 0
+		}
+	}
+
+	var personList = plotList.filter { it.Update >= lastTurnStart && it.WardId < fcIdStart && (it.SaleState == 0 || it.Update >= thisTurnStart) }
+	var fcList = plotList.filter { it.Update >= lastTurnStart && it.WardId >= fcIdStart && (it.SaleState == 0 || it.Update >= thisTurnStart) }
+
+	if (limitStr.isNotEmpty()) {
+		//单独查询个人房or部队房
+		if (limitStr.contains("部队")) personList = mutableListOf()
+		if (limitStr.contains("个人")) fcList = mutableListOf()
+		if (limitStr.contains("准备")) {
+			personList = personList.filter { it.SaleState == 3 || (it.SaleState == 2 && it.WinnerIndex == 0) }
+			fcList = fcList.filter { it.SaleState == 3 || (it.SaleState == 2 && it.WinnerIndex == 0) }
+		}
+
+		if (limitStr.any { i -> sizeMap.contains("$i") }) {
+			personList = personList.filter { limitStr.contains(sizeMap[it.Size]) }
+			fcList = fcList.filter { limitStr.contains(sizeMap[it.Size]) }
+		}
+		if (limitStr.any { i -> territoryMap.containsValue("$i") }) {
+			personList = personList.filter { limitStr.contains(territoryMap[it.TerritoryId] ?: "") }
+			fcList = fcList.filter { limitStr.contains(territoryMap[it.TerritoryId] ?: "") }
+		}
+	}
+	personList = personList.run { sortedBy { it.WardId * 60 + it.HouseId }.sortedBy { it.TerritoryId }.sortedByDescending { it.Size }.sortedByDescending { it.VoteCount } }
+	fcList = fcList.run { sortedBy { it.WardId * 60 + it.HouseId }.sortedBy { it.TerritoryId }.sortedByDescending { it.Size }.sortedByDescending { it.VoteCount } }
+
+
+	val personLarge = personList.indexOfFirst { it.Size > 0 }
+	val fcLarge = fcList.indexOfFirst { it.Size > 0 }
+	val personShow = if (personLarge in Limit_Person) personLarge else if (personLarge > Limit_Person.last) Limit_Person.last else Limit_Person.first
+	val fcShow = if (fcLarge in Limit_FC) fcLarge else if (fcLarge > Limit_FC.last) Limit_FC.last else Limit_FC.first
+
+	/**
+	 * 参与人数过期时间，单位为秒
+	 */
+	var outdatedLimit: Long
+	val outdatedTime: String
+	if (canEntry) {
+		outdatedLimit = maxOf(10 * 60.0, minOf(outdatedWarn.toDouble(), (now - thisTurnStart) * 0.7, (thisTurnShow - now) * 0.7)).toLong()
+		outdatedTime = if (outdatedLimit / 60 >= 60) {
+			outdatedLimit = (outdatedLimit / 60.0 / 60).roundToLong() * 60 * 60
+			"超过${outdatedLimit / 60 / 60}小时"
+		} else {
+			outdatedLimit = (outdatedLimit / 60.0 / 5).roundToLong() * 5 * 60
+			"超过${outdatedLimit / 60}分钟"
+		}
+	} else {
+		outdatedLimit = now - thisTurnShow
+		outdatedTime = "公布后"
+	}
+
+	val personTextList = personList.map(trans(now, outdatedLimit, showServerName)).take(personShow)
+	val fcTextList = fcList.map(trans(now, outdatedLimit, showServerName)).take(fcShow)
+
+	val title = (String.format("[第%s轮%s日%s]<%s>%s：", turn, diff % 9 + 1, if (canEntry) "参与" else "公示", serverName, limitStr.uppercase(Locale.getDefault())))
+	val outputTitle = mutableListOf<String>()
+	if (personList.isEmpty() && fcTextList.isEmpty()) {
+		outputTitle.add(title)
+		outputTitle.add("无空地 / 无上传数据")
+	} else {
+		outputTitle.add("${title}${personList.size + fcList.size}处")
+	}
+	val textTitle = outputTitle.map { Pair(TextLine.make(it, font), black) }
+
+	val outputPerson = mutableListOf<String>()
+	if (!limitStr.contains("个人") && personList.isNotEmpty()) outputPerson.add("个人：${personList.size}")
+	outputPerson.addAll(personTextList)
+	val textPerson = outputPerson.map { if (it.startsWith(outdatedWarnChar)) Pair(TextLine.make(it.substring(1), font), grey) else Pair(TextLine.make(it, font), black) }
+
+	val outputFc = mutableListOf<String>()
+	if (!limitStr.contains("部队") && fcList.isNotEmpty()) outputFc.add("部队：${fcList.size}")
+	outputFc.addAll(fcTextList)
+	val textFc = outputFc.map { if (it.startsWith(outdatedWarnChar)) Pair(TextLine.make(it.substring(1), font), grey) else Pair(TextLine.make(it, font), black) }
+
+	val outputBottom = mutableListOf<String>()
+	outputBottom.add("")
+	if ((outputPerson + outputFc).any { it.contains(outdatedWarnChar) }) outputBottom.add(outdatedWarnChar + outdatedTime + outdatedWarnTips)
+	if (personList.size > personTextList.size || fcList.size > fcTextList.size) {
+		if (showTipsGroup.contains(groupId)) {
+			outputBottom.add("更多空地请查阅群公告中网站")
+			outputBottom.add("数据上传方式使用“/空地”查询数据源网站，并获取对应上传方式")
+		} else
+			outputBottom.add("更多空地及数据上传方式使用“/空地”查询")
+	} else
+		outputBottom.add("数据上传方式使用“/空地”查看数据源网站")
+	if (successCount.any { it != searchList.size }) {
+		val str = StringBuilder()
+		str.append("请求成功：")
+		HouseDataList.forEachIndexed { index, voteInfoOperate ->
+			if (index != 0) str.append(", ")
+			str.append(String.format("%s[%,d/%,d]", voteInfoOperate.sourceName, successCount[index], searchList.size))
+		}
+		outputBottom.add(str.toString())
+	}
+	while (outputBottom.lastOrNull()?.isEmpty() == true)
+		outputBottom.removeLast()
+	val textBottom = outputBottom.map { if (it.startsWith(outdatedWarnChar)) Pair(TextLine.make(it, font), grey) else Pair(TextLine.make(it, font), black) }
+	/*
+	val textList = output.map {
+		if (it.startsWith(outdatedWarnChar))
+			Pair(TextLine.make(it.substring(1), font), grey)
+		else
+			Pair(TextLine.make(it, font), black)
+	}*/
+	val base = if (textPerson.isEmpty()) 0F else textPerson.maxOfOrNull { it.first.width }!! + Merge_Mid
+
+	val height = font.metrics.height * (outputTitle.size + maxOf(outputPerson.size, outputFc.size) + outputBottom.size) + Merge_Up + Merge_Down
+	val width = Merge_Left + maxOf(textTitle.maxOfOrNull { it.first.width } ?: 0F, base + (textFc.maxOfOrNull { it.first.width } ?: 0F), textBottom.maxOfOrNull { it.first.width } ?: 0F) + Merge_Right
+
+	val surface = Surface.makeRasterN32Premul(width.toInt(), height.toInt())
+	surface.canvas.run {
+		clear(white.color)
+
+		for ((i, it) in textTitle.withIndex()) {
+			drawTextLine(it.first, Merge_Left, i * font.metrics.height + 10 - font.metrics.ascent, it.second)
+		}
+
+		for ((i, it) in textPerson.withIndex()) {
+			drawTextLine(it.first, Merge_Left, outputTitle.size * font.metrics.height + i * font.metrics.height + 10 - font.metrics.ascent, it.second)
+		}
+		for ((i, it) in textFc.withIndex()) {
+			drawTextLine(it.first, Merge_Left + base, outputTitle.size * font.metrics.height + i * font.metrics.height + 10 - font.metrics.ascent, it.second)
+		}
+		for ((i, it) in textBottom.withIndex()) {
+			drawTextLine(it.first, Merge_Left, (outputTitle.size + maxOf(textPerson.size, textFc.size) + i) * font.metrics.height + 10 - font.metrics.ascent, it.second)
+
+		}
+	}
+	if (groupId == 0L) {
+		surface.makeImageSnapshot().encodeToData()?.use {
+			WannaHomeKt.logger.info { "未设置输出群号，导出至Data文件夹tmp.png，大小：${it.size}" }
+			File(WannaHomeKt.dataFolderPath.toString(), "tmp.png").writeBytes(it.bytes)
+		}
+	}
+	return surface
+}
+
 public object TestCommand : SimpleCommand(
 	WannaHomeKt, "wh", "WannaHome", description = "示例指令"
 ) {
 	@Handler
 	public suspend fun handle(commandContext: CommandContext) {
 
-		val t = "测试输出"
-		val utf8: String = String(t.toByteArray(charset("UTF-8")))
-		println(utf8)
-		val unicode = String(utf8.toByteArray(), Charsets.UTF_8)
-		println(unicode)
-		val gbk = String(unicode.toByteArray(charset("GBK")))
+		val list = listOf(
+			PlotInfo(1177, 339, 1, 4, 2, Calendar.getInstance().timeInMillis / 1000),
+			PlotInfo(1177, 339, 20, 4, 2, Calendar.getInstance().timeInMillis / 1000 - 12 * 3600, 1)
+		)
+		//getPic("测试数据", list)
 		val bitmap = Bitmap().apply {
 			allocN32Pixels(120, 180)
-
 		}
-		val font = Font(FontMgr.default.matchFamilyStyle("宋体", FontStyle.NORMAL))
-		//val font = Font(Typeface.makeFromName("SimSun", FontStyle.NORMAL))
-		font.size = 12f
 
-		Typeface.makeFromName("SimSun", FontStyle.NORMAL).familyNames.forEach {
+
+		/*Typeface.makeFromName("SimSun", FontStyle.NORMAL).familyNames.forEach {
 			WannaHomeKt.logger.info { "字符集：${it.name}<${it.language}>" }
-		}
-		val prefix = TextLine.make(unicode, font)
-		val suffix = TextLine.make("(TestOutput)", font)
-		val surface = Surface.makeRasterN32Premul((prefix.width + suffix.width + 50).toInt(), (suffix.height + 40).toInt())
-		//val surface = Surface()
-		surface.canvas.run {
-			val black = Paint().setARGB(0xFF, 0x00, 0x00, 0x00)
-			val white = Paint().setARGB(0xFF, 0xFF, 0xFF, 0xFF)
-			val yellow = Paint().setARGB(0xFF, 0xFF, 0x90, 0x00)
-			clear(black.color)
-			drawTextLine(prefix, 10F, 20 - font.metrics.ascent, white)
-			drawRRect(RRect.makeXYWH(prefix.width + 15, 15F, suffix.width + 20, suffix.height + 10, 5F), yellow)
-			drawTextLine(suffix, prefix.width + 25, 20 - font.metrics.ascent, black)
+		}*/
 
-		}
-		surface.makeImageSnapshot().encodeToData()?.use {
-			//File("C:\\Users\\status102\\Desktop\\latest.png").writeBytes(it.bytes)
-		}
+		/*
 		surface.makeImageSnapshot().encodeToData()?.use {
 			WannaHomeKt.logger.info { "大小：${it.size}" }
 			it.bytes.inputStream().toExternalResource().use {
@@ -256,31 +476,31 @@ public object TestCommand : SimpleCommand(
 						commandContext.sender.sendMessage("控制台：" + image.toMessageChain().contentToString())
 				}
 			}
-		}
-
-		val canvas = Canvas(bitmap)
-		canvas.drawString("测试输出(test)", 10.0f, 30f, font, Paint().setARGB(255, 255, 0, 0))
-		Image.makeFromBitmap(bitmap).encodeToData()?.use {
-			WannaHomeKt.logger.info { "大小：${it.size}" }
-			it.bytes.inputStream().toExternalResource().use {
-				if (commandContext.sender.subject != null) {
-					val image = it.uploadAsImage(commandContext.sender.subject!!)
-					if (commandContext.sender.isNotConsole())
-						commandContext.sender.sendMessage(commandContext.originalMessage.quote() + image)
-					else
-						commandContext.sender.sendMessage("控制台：" + image.toMessageChain().contentToString())
+		}*/
+		/*
+				val canvas = Canvas(bitmap)
+				canvas.drawString("测试输出(test)", 10.0f, 30f, font, Paint().setARGB(255, 255, 0, 0))
+				Image.makeFromBitmap(bitmap).encodeToData()?.use {
+					WannaHomeKt.logger.info { "大小：${it.size}" }
+					it.bytes.inputStream().toExternalResource().use {
+						if (commandContext.sender.subject != null) {
+							val image = it.uploadAsImage(commandContext.sender.subject!!)
+							if (commandContext.sender.isNotConsole())
+								commandContext.sender.sendMessage(commandContext.originalMessage.quote() + image)
+							else
+								commandContext.sender.sendMessage("控制台：" + image.toMessageChain().contentToString())
+						}
+					}
 				}
-			}
-		}
-		canvas.close()
-		bitmap.close()
+				canvas.close()
+				bitmap.close()
+		*/
 
-		WannaHomeKt.logger.info { "默认字符集：" + Charset.defaultCharset() }
-		//println((serverMap.keys + subNameMap.keys).joinTo(StringBuilder(), "|"))
-		//WannaCommand.handle(Cont(this.message, toCommandSender()), serverList, limitStr.toString())
+	}
 
-		//val str = StringBuilder()
-		//sendMessage(str.toString().trimEnd('\n'))
+	@Handler
+	suspend fun handle(commandContext: CommandContext, vararg str: String) {
+		getEmptyPlace(commandContext, str.joinToString(" "))
 	}
 }
 
@@ -348,6 +568,9 @@ public object WannaCommand : SimpleCommand(
 ) {
 	@Handler
 	suspend fun handle(commandContext: CommandContext) {
+
+		val font = Font(font?.typefaceOrDefault)
+		font.size = 36f
 		val now = Calendar.getInstance().time.time
 		val start = Calendar.getInstance().apply { time = strTimeToDate("2022-08-08 23:00:00") }
 
@@ -364,23 +587,26 @@ public object WannaCommand : SimpleCommand(
 		val nextTurnStart = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, turn * 9) }
 		val nextEventTimeStr = String.format("%d号%02d:%02d", nextEventTime.get(Calendar.DAY_OF_MONTH), nextEventTime.get(Calendar.HOUR_OF_DAY), nextEventTime.get(Calendar.MINUTE))
 
-		val output = StringBuilder()
-		output.appendLine("使用方法：")
-		output.appendLine("/空地：获取基本使用方法")
-		output.appendLine("/空地 <服务器/大区名/SML|海|森|白|沙|雪|个人|部队|准备>：获取服务器空地信息")
-		output.appendLine("/空地 简称：获取服务器简称列表")
-		output.appendLine()
-		output.appendLine(String.format("今日为第%d轮%d天", turn, diff % 9 + 1))
+		val output = mutableListOf<String>()
+		output.add("使用方法：")
+		output.add("/空地：获取基本使用方法")
+		output.add("/空地 <服务器/大区名/SML|海|森|白|沙|雪|个人|部队|准备>：获取服务器空地信息")
+		output.add("/空地 简称：获取服务器简称列表")
+		output.add("")
+		output.add(String.format("今日为第%d轮%d天", turn, diff % 9 + 1))
 		if (!canEntry)
-			output.appendLine(String.format("下轮参与时间：%s点~%s点", unixTimeToStr(nextTurnStart.timeInMillis, true).substring(5, 13), unixTimeToStr((nextTurnStart.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 5) }.timeInMillis, true).substring(5, 13)))
+			output.add(String.format("下轮参与时间：%s点~%s点", unixTimeToStr(nextTurnStart.timeInMillis, true).substring(5, 13), unixTimeToStr((nextTurnStart.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 5) }.timeInMillis, true).substring(5, 13)))
 		else
-			output.appendLine(String.format("公示时间：%s点~%s点", unixTimeToStr(nextEventTime.timeInMillis, true).substring(5, 13), unixTimeToStr(nextTurnStart.timeInMillis, true).substring(5, 13)))
-		output.appendLine()
-		output.appendLine("感谢提供数据支持：")
-		output.appendLine("Cettiidae/猹")
-		output.appendLine("冰音：https://wanahome.ffxiv.bingyin.org/")
-		output.appendLine("Jim：https://house.ffxiv.cyou/")
-		output.appendLine(
+			output.add(String.format("公示时间：%s点~%s点", unixTimeToStr(nextEventTime.timeInMillis, true).substring(5, 13), unixTimeToStr(nextTurnStart.timeInMillis, true).substring(5, 13)))
+		output.add("")
+		output.add("感谢提供数据支持：")
+		output.add("Cettiidae/猹：https://home.ff14.cn/")
+		output.add("（使用第三方插件上传摇号数据，支持记录人数）")
+		output.add("冰音：https://wanahome.ffxiv.bingyin.org/")
+		output.add("（网站提供ngld悬浮窗上传方式，无需配置额外插件）")
+		output.add("Jim：https://house.ffxiv.cyou/")
+		output.add("（网站提供ACT插件上传方式，支持记录人数）")
+		output.add(
 			"平均延迟[失败次数/请求量]：" + String.format(
 				"%.3fs[%,d/%,d]，%.3fs[%,d/%,d]，%.3fs[%,d/%,d]",
 				VoteInfoCha.Companion.Logger.TimeMillis.toDouble() / VoteInfoCha.Companion.Logger.CallTimes / 1000, VoteInfoCha.Companion.Logger.FailTimes, VoteInfoCha.Companion.Logger.CallTimes,
@@ -388,13 +614,52 @@ public object WannaCommand : SimpleCommand(
 				VoteInfoHouseHelper.Companion.Logger.TimeMillis.toDouble() / VoteInfoHouseHelper.Companion.Logger.CallTimes / 1000, VoteInfoHouseHelper.Companion.Logger.FailTimes, VoteInfoHouseHelper.Companion.Logger.CallTimes,
 			)
 		)
-		output.appendLine()
-		output.appendLine("By status102/依琳娜")
+		output.add("")
+		output.add("所有空地信息均由玩家上传，希望更多人能加入上传信息的队列")
+		output.add("By status102/依琳娜")
 
+		val outputTextLine = output.map { TextLine.make(it, font) }
+		val qrEncoder = Image.makeFromEncoded(
+			QRCode("https://home.ff14.cn/").render(
+				10, darkColor = Colors.rgba(0, 0, 0, 80), brightColor = Colors.rgba(255, 255, 255, 0)
+			).getBytes()
+		)
+
+		val surface = Surface.makeRasterN32Premul((Merge_Left + (outputTextLine.maxOfOrNull { it.width } ?: 0F) + Merge_Right).toInt(), (Merge_Up + outputTextLine.sumOf { ceil(it.height).toInt() } + Merge_Down).toInt())
+		surface.canvas.run {
+			clear(Paint().setARGB(0xFF, 0xFF, 0xFF, 0xFF).color)
+			val black = Paint().setARGB(0xFF, 0, 0, 0)
+			var baseHeight = 0F
+			outputTextLine.forEach {
+				drawTextLine(it, Merge_Left, baseHeight + Merge_Up - font.metrics.ascent, black)
+				baseHeight += it.height
+			}
+			//drawImage(qrEncoder, (surface.width - qrEncoder.width) / 5F * 4, Merge_Up + Merge_Mid + outputTextLine.take(3).sumOf { ceil(it.height).toInt() })
+		}
+
+		surface.makeImageSnapshot().encodeToData()?.use {
+			it.bytes.inputStream().toExternalResource().use {
+				if (commandContext.sender.subject != null) {
+					val image = it.uploadAsImage(commandContext.sender.subject!!)
+					if (commandContext.sender.isNotConsole())
+						commandContext.sender.sendMessage(commandContext.originalMessage.quote() + image)
+					else {
+						commandContext.sender.sendMessage("控制台：" + image.toMessageChain().contentToString())
+					}
+				} else {
+					surface.makeImageSnapshot().encodeToData()?.use {
+						WannaHomeKt.logger.info { "未设置输出群号，导出至Data文件夹tmp.png，大小：${it.size}" }
+						File(WannaHomeKt.dataFolderPath.toString(), "tmp.png").writeBytes(it.bytes)
+					}
+				}
+			}
+		}
+		surface.close()
+		/*
 		if (commandContext.sender.isNotConsole())
 			commandContext.sender.sendMessage(commandContext.originalMessage.quote() + output.toString().trimEnd('\n'))
 		else
-			commandContext.sender.sendMessage(output.toString().trimEnd('\n'))
+			commandContext.sender.sendMessage(output.toString().trimEnd('\n'))*/
 		//commandContext.sender.sendMessage(commandContext.originalMessage.quote() + output.toString().trimEnd('\n'))
 	}
 
@@ -458,23 +723,18 @@ public object WannaCommand : SimpleCommand(
 	}
 
 	@Handler
-	suspend fun handle(commandContext: CommandContext, serverList: List<String>, size: String) {
-		if (serverList.size == 1) {
-			handle(commandContext, serverList[0], size)
-			return
-		}
+	suspend fun handle(commandContext: CommandContext, serverList: List<String>, limitStr: String) {
 		if (serverList.isEmpty() || !serverList.all { serverIdMap.containsKey(it) || subNameMap.containsKey(it) || serverMap.containsKey(it) }) {
 			commandContext.sender.sendMessage(commandContext.originalMessage.quote() + "<${serverList.joinTo(java.lang.StringBuilder())}>服务器/大区不存在")
 			return
 		}
-
 		//var serverName = str
 		//if (subNameMap.containsKey(serverName)) serverName = subNameMap[serverName].toString()
 		//val realName = serverName
 		//if (serverIdMap.containsKey(serverName)) serverName = serverIdMap[serverName].toString()
 		//val realName = "${serverList.size}个服"
 		val search = serverList.fold(mutableListOf<Int>()) { sum, element -> (sum + serverOrDcNickNameToServerName(element).map { serverIdMap[it] ?: 0 }.filter { it > 0 }).toMutableList() }.toSet().toList()
-		val realName = "${search.size}个服"
+		val realName = if (serverList.size == 1) serverList[0] else "${search.size}个服"
 
 		val now = Calendar.getInstance().timeInMillis
 		val start = Calendar.getInstance().apply { time = strTimeToDate("2022-08-08 23:00:00") }
@@ -492,25 +752,43 @@ public object WannaCommand : SimpleCommand(
 		commandContext.sender.getGroupOrNull()?.run {
 			changeBotGroupNameCard(this, canEntry, nextEventTimeStr)
 		}
-		val output = getServerData(commandContext.sender.getGroupOrNull()?.id, search, realName, size.uppercase(Locale.getDefault())) { i, _ -> i >= 30 }.trimEnd('\n')
-		runBlocking {
-			try {
-				if (commandContext.sender.isNotConsole())
-					commandContext.sender.sendMessage(commandContext.originalMessage.quote() + output)
-				else
-					commandContext.sender.sendMessage(output)
-			} catch (e: MessageTooLargeException) {
-				val list = output.split("\n")
-				for (i in list.indices step 8) {
-					commandContext.sender.sendMessage(commandContext.originalMessage.quote() + "(${i / 8 + 1}/${ceil(list.size / 8.0).toInt()})" + list.slice(i until minOf(i + 8, list.size)).reduce { acc, s -> "$acc\n$s" })
-					delay(500)
+		try {
+			getPic(realName, search, commandContext.sender.getGroupOrNull()?.id ?: 0, limitStr.uppercase(Locale.getDefault()))
+				.use { surface ->
+					surface.makeImageSnapshot().encodeToData()?.use { data ->
+						data.bytes.inputStream().toExternalResource().use {
+							if (commandContext.sender.subject != null) {
+								val image = it.uploadAsImage(commandContext.sender.subject!!)
+								if (commandContext.sender.isNotConsole())
+									commandContext.sender.sendMessage(commandContext.originalMessage.quote() + image)
+								else
+									commandContext.sender.sendMessage("控制台：" + image.toMessageChain().contentToString())
+							}
+						}
+					}
 				}
-			}
-			synchronized(groupListLock) {
-				if (commandContext.sender.getGroupOrNull() != null)
-					Data.WannaHomeGroupList.add("${commandContext.sender.bot?.id}-${commandContext.sender.getGroupOrNull()?.id}")
-			}
+		} catch (e: Exception) {
+			WannaHomeKt.logger.error { "发送房屋数据失败：$e\n${e.stackTraceToString()}" }
 		}
+		/*
+		val output = getServerData(commandContext.sender.getGroupOrNull()?.id, search, realName, size.uppercase(Locale.getDefault())) { i, _ -> i >= 30 }.trimEnd('\n')
+		try {
+			if (commandContext.sender.isNotConsole())
+				commandContext.sender.sendMessage(commandContext.originalMessage.quote() + output)
+			else
+				commandContext.sender.sendMessage(output)
+		} catch (e: MessageTooLargeException) {
+			val list = output.split("\n")
+			for (i in list.indices step 8) {
+				commandContext.sender.sendMessage(commandContext.originalMessage.quote() + "(${i / 8 + 1}/${ceil(list.size / 8.0).toInt()})" + list.slice(i until minOf(i + 8, list.size)).reduce { acc, s -> "$acc\n$s" })
+				delay(500)
+			}
+		}*/
+		synchronized(groupListLock) {
+			if (commandContext.sender.getGroupOrNull() != null)
+				Data.WannaHomeGroupList.add("${commandContext.sender.bot?.id}-${commandContext.sender.getGroupOrNull()?.id}")
+		}
+
 	}
 
 	private fun serverOrDcNickNameToServerName(name: String): MutableList<String> {
@@ -541,23 +819,24 @@ public object WannaCommand : SimpleCommand(
 	}
 
 	@OptIn(DelicateCoroutinesApi::class)
-	private suspend fun getHouseData(serverIdList: List<Int>, lastTurnStart: Long, thisTurnStart: Long): Channel<Map<String, PlotInfo>> {
-		val channel = Channel<Map<String, PlotInfo>>(Channel.UNLIMITED)
+	suspend fun getHouseData(serverIdList: List<Int>, lastTurnStart: Long, thisTurnStart: Long): Channel<Triple<VoteInfoOperate, Boolean, Map<String, PlotInfo>>> {
+		val channel = Channel<Triple<VoteInfoOperate, Boolean, Map<String, PlotInfo>>>(Channel.UNLIMITED)
 
 		GlobalScope.launch {
 			val list = mutableListOf<Job>()
-			try {
-				serverIdList.forEach { serverId ->
-					HouseDataList.forEach {
-						list.add(launch { channel.send(it.run(serverId, lastTurnStart, thisTurnStart)) })
+			serverIdList.forEach { serverId ->
+				HouseDataList.forEach {
+					try {
+						list.add(launch {
+							channel.send(Triple(it, true, it.run(serverId, lastTurnStart, thisTurnStart)))
+						})
+					} catch (e: Exception) {
+						WannaHomeKt.logger.error { "${it.sourceName}获取网络数据出错：$e\n${e.stackTraceToString()}" }
+						channel.send(Triple(it, false, mapOf()))
 					}
 				}
-
-				//list.forEach { it.join() }
-			} catch (e: Exception) {
-				WannaHomeKt.logger.error { "获取网络数据出错：\n${e.stackTraceToString()}" }
-				channel.close()
 			}
+			//list.forEach { it.join() }
 		}
 		return channel
 	}
@@ -582,12 +861,12 @@ public object WannaCommand : SimpleCommand(
 			val nextEventTimeStr = String.format("%d号%02d点", nextEventTime.get(Calendar.DAY_OF_MONTH), nextEventTime.get(Calendar.HOUR_OF_DAY))
 
 			val plotInfoMap = mutableMapOf<String, PlotInfo>()
-			val channel = getHouseData(searchList, lastTurnStart, thisTurnStart)
 			val output = java.lang.StringBuilder()
 			output.appendLine(String.format("[第%s轮%s日%s]<%s>%s：", turn, diff % 9 + 1, if (canEntry) "参与" else "公示", serverName, limitStr.uppercase(Locale.getDefault())))
 
+			val channel = getHouseData(searchList, lastTurnStart, thisTurnStart)
 			repeat(HouseDataList.size * searchList.size) {
-				channel.receive().forEach { (key, it) ->
+				channel.receive().third.forEach { (key, it) ->
 					if (plotInfoMap.containsKey(key)) {
 						if (plotInfoMap[key]!!.SaleState == 0 ||
 							(it.Update > plotInfoMap[key]!!.Update &&
@@ -638,10 +917,10 @@ public object WannaCommand : SimpleCommand(
 				personList = personList.run { sortedBy { it.WardId * 60 + it.HouseId }.sortedBy { it.TerritoryId }.sortedByDescending { it.Size }.sortedByDescending { it.VoteCount } }
 				fcList = fcList.run { sortedBy { it.WardId * 60 + it.HouseId }.sortedBy { it.TerritoryId }.sortedByDescending { it.Size }.sortedByDescending { it.VoteCount } }
 
-				var personShow = min(Limit_Person, personList.size)
-				var fcShow = min(Limit_FC, fcList.size)
-				if (personShow < Limit_Person) fcShow = Limit_Person + Limit_FC - personShow
-				if (fcShow < Limit_FC) personShow = Limit_Person + Limit_FC - fcShow
+				var personShow = min(Limit_Person.first, personList.size)
+				var fcShow = min(Limit_FC.first, fcList.size)
+				if (personShow < Limit_Person.first) fcShow = Limit_Person.first + Limit_FC.first - personShow
+				if (fcShow < Limit_FC.first) personShow = Limit_Person.first + Limit_FC.first - fcShow
 
 				if (personList.isEmpty() && fcList.isEmpty()) {
 					output.deleteCharAt(output.length - 1)
@@ -677,7 +956,7 @@ public object WannaCommand : SimpleCommand(
 				//output.appendLine(String.format("今日为第%d轮%d天，%s轮%s：%s", turn, diff % 9 + 1, if (canEntry) "本" else "下", if (!canEntry) "参与" else "公示", nextEventTimeStr))
 				if (output.contains(outdatedWarnChar))
 					output.appendLine(outdatedWarnChar + outdatedTime + outdatedWarnTips)
-				if (personList.size + fcList.size > Limit_Person + Limit_FC) {
+				if (personList.size + fcList.size > Limit_Person.first + Limit_FC.first) {
 					if (showTipsGroup.contains(groupId))
 						output.appendLine("更多空地请查阅群公告中网站")
 					else
@@ -697,13 +976,13 @@ public object WannaCommand : SimpleCommand(
 		}
 	}
 
-	private fun printSaleList(saleList: List<PlotInfo>, countLimit: Int, timeStamp: Long, outdatedLimit: Long, showServerName: Boolean = false): String {
+	private fun printSaleList(saleList: List<PlotInfo>, countLimit: Int, nowTimeStamp: Long, outdatedLimit: Long, showServerName: Boolean = false): String {
 		if (saleList.isEmpty())
 			return ""
 		val output = StringBuilder()
 		for ((i, sale) in saleList.withIndex()) {
 			if (i < countLimit) {
-				if (sale.SaleState == 1 && timeStamp - sale.Update >= outdatedLimit)
+				if (sale.SaleState == 1 && nowTimeStamp - sale.Update >= outdatedLimit)
 					output.append(outdatedWarnChar)
 				output.append(String.format("[%s %s%s%02d-%02d]", sizeMap[sale.Size], if (showServerName) "${serverNameMap[sale.ServerId]?.substring(0, 2)} " else "", territoryMap[sale.TerritoryId], sale.WardId + 1, sale.HouseId + 1))
 				if (sale.SaleState in 1..2)
@@ -855,14 +1134,18 @@ public suspend fun sendNoteMessage() {
 		Data.WannaHomeGroupList.clear()
 	}
 
-	Bot.instances.forEach { bot ->
-		if (bot.isOnline && noteList.containsKey(bot.id)) {
-			noteList[bot.id]?.forEach {
-				bot.getGroup(it)?.run {
-					changeBotGroupNameCard(this, canEntry, nextEventTimeStr)
-					sendMessage(output.toString().trimEnd('\n'))
+	runBlocking {
+		Bot.instances.forEach { bot ->
+			if (bot.isOnline && noteList.containsKey(bot.id)) {
+				noteList[bot.id]?.forEach {
+					launch {
+						bot.getGroup(it)?.run {
+							delay(Random(Calendar.getInstance().timeInMillis).nextLong(200, 5000))
+							changeBotGroupNameCard(this, canEntry, nextEventTimeStr)
+							sendMessage(output.toString().trimEnd('\n'))
+						}
+					}
 				}
-
 			}
 		}
 	}

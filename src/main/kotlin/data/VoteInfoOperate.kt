@@ -1,5 +1,11 @@
 package cn.status102.data
 
 interface VoteInfoOperate {
+	val sourceName : String
+
+	/**
+	 * @param lastTurnStart 上一轮摇号开始，秒为单位
+	 * @param thisTurnStart 当前轮摇号开始，秒为单位
+	 */
 	suspend fun run(serverId: Int, lastTurnStart: Long, thisTurnStart: Long): Map<String, PlotInfo>
 }

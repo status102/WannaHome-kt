@@ -7,6 +7,7 @@ import cn.status102.data.VoteInfoCha.Companion.Logger.CallTimes
 import cn.status102.data.VoteInfoCha.Companion.Logger.FailTimes
 import cn.status102.data.VoteInfoCha.Companion.Logger.TimeMillis
 import cn.status102.strTimeToUnix
+import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -14,12 +15,10 @@ import kotlinx.serialization.json.Json
 import net.mamoe.mirai.console.data.AutoSavePluginData
 import net.mamoe.mirai.console.data.value
 import net.mamoe.mirai.utils.error
-import net.mamoe.mirai.utils.info
 import okhttp3.Call
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
-import java.text.SimpleDateFormat
 import java.util.*
 
 class VoteInfoCha : VoteInfoOperate {
@@ -52,7 +51,7 @@ class VoteInfoCha : VoteInfoOperate {
 			return client.newCall(newRequest(serverId))
 		}
 
-		fun call(serverId: Int, reCallTimes: Int = 0, reCallTimesLimit: Int = 3): Response {
+		suspend fun call(serverId: Int, reCallTimes: Int = 0, reCallTimesLimit: Int = 3): Response {
 			try {
 				return newCall(serverId).execute().apply {
 					if (this.networkResponse != null)
@@ -63,6 +62,7 @@ class VoteInfoCha : VoteInfoOperate {
 					CallTimes++
 					FailTimes++
 					WannaHomeKt.logger.error { "猹获取错误：$e\n${e.stackTraceToString()}" }
+					delay(3000)
 					return call(serverId, reCallTimes + 1)
 				}
 				throw e
@@ -77,47 +77,46 @@ class VoteInfoCha : VoteInfoOperate {
 	private val jsonDecoder: Json by lazy {
 		Json { ignoreUnknownKeys = true }
 	}
+	override val sourceName: String = "猹"
 
 	override suspend fun run(serverId: Int, lastTurnStart: Long, thisTurnStart: Long): Map<String, PlotInfo> {
-		WannaHomeKt.logger.info { "开始获取猹：${SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(Calendar.getInstance().time.time)}" }
+		//WannaHomeKt.logger.info { "开始获取猹：${SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(Calendar.getInstance().time.time)}" }
 
 		val voteInfoMap = mutableMapOf<String, PlotInfo>()
-		try {
-			val startTimeStamp = Calendar.getInstance().timeInMillis
-			call(serverId).use { response ->
-				val str = response.body?.string() ?: ""
-				if (response.networkResponse != null) {
-					TimeMillis += Calendar.getInstance().timeInMillis - startTimeStamp
-					if (response.headers["last-modified"] != null)
-						LastModified = response.headers["last-modified"]!!
-				}
-				if (response.isSuccessful && str.isNotEmpty()) {
-					val voteInfoList = jsonDecoder.decodeFromString<List<VoteInfo>>(str)
-
-					voteInfoList.filter { voteInfo ->
-						strTimeToUnix(voteInfo.updateTimeStr) >= thisTurnStart || (strTimeToUnix(voteInfo.updateTimeStr) >= lastTurnStart && voteInfo.IsSell in 2..3)
-					}.forEach {
-						voteInfoMap.run {
-							if (containsKey("${it.TerritoryId}-${it.WardId}-${it.HouseId}")) {
-								if (this["$serverId-${it.TerritoryId}-${it.WardId}-${it.HouseId}"]!!.Update < strTimeToUnix(it.updateTimeStr) || this["${it.TerritoryId}-${it.WardId}-${it.HouseId}"]!!.SaleState == 0) {
-									this["$serverId-${it.TerritoryId}-${it.WardId}-${it.HouseId}"]!!.VoteCount = it.VoteCount
-									this["$serverId-${it.TerritoryId}-${it.WardId}-${it.HouseId}"]!!.WinnerIndex = it.WinnerIndex
-									this["$serverId-${it.TerritoryId}-${it.WardId}-${it.HouseId}"]!!.SaleState = it.IsSell
-									this["$serverId-${it.TerritoryId}-${it.WardId}-${it.HouseId}"]!!.Update = strTimeToUnix(it.updateTimeStr)
-								}
-							} else {
-								this["$serverId-${it.TerritoryId}-${it.WardId}-${it.HouseId}"] = PlotInfo(serverId, it.TerritoryId, it.WardId, it.HouseId, it.Size, strTimeToUnix(it.updateTimeStr), it.IsSell, it.VoteCount, it.WinnerIndex)
-							}
-						}
-					}
-				} else {
-					WannaHomeKt.logger.error { "猹获取错误：Code:${response.code}\nBody:${response}" }
-				}
+		val startTimeStamp = Calendar.getInstance().timeInMillis
+		call(serverId).use { response ->
+			val str = response.body?.string() ?: ""
+			if (response.networkResponse != null) {
+				TimeMillis += Calendar.getInstance().timeInMillis - startTimeStamp
+				if (response.headers["last-modified"] != null)
+					LastModified = response.headers["last-modified"]!!
 			}
-		} catch (e: Exception) {
-			WannaHomeKt.logger.error { "猹获取错误：$e\n${e.stackTraceToString()}" }
+			if (response.isSuccessful && str.isNotEmpty()) {
+				val voteInfoList = jsonDecoder.decodeFromString<List<VoteInfo>>(str)
+
+				voteInfoList.filter { voteInfo ->
+					strTimeToUnix(voteInfo.updateTimeStr) >= thisTurnStart || (strTimeToUnix(voteInfo.updateTimeStr) >= lastTurnStart && voteInfo.IsSell == 3)
+				}.forEach {
+					voteInfoMap.run {
+						/*if (containsKey("${it.TerritoryId}-${it.WardId}-${it.HouseId}")) {
+							if (this["$serverId-${it.TerritoryId}-${it.WardId}-${it.HouseId}"]!!.Update < strTimeToUnix(it.updateTimeStr) || this["${it.TerritoryId}-${it.WardId}-${it.HouseId}"]!!.SaleState == 0) {
+								this["$serverId-${it.TerritoryId}-${it.WardId}-${it.HouseId}"]!!.VoteCount = it.VoteCount
+								this["$serverId-${it.TerritoryId}-${it.WardId}-${it.HouseId}"]!!.WinnerIndex = it.WinnerIndex
+								this["$serverId-${it.TerritoryId}-${it.WardId}-${it.HouseId}"]!!.SaleState = it.IsSell
+								this["$serverId-${it.TerritoryId}-${it.WardId}-${it.HouseId}"]!!.Update = strTimeToUnix(it.updateTimeStr)
+							}
+						} else {*/
+						this["$serverId-${it.TerritoryId}-${it.WardId}-${it.HouseId}"] = PlotInfo(serverId, it.TerritoryId, it.WardId, it.HouseId, it.Size, strTimeToUnix(it.updateTimeStr), it.IsSell, it.VoteCount, it.WinnerIndex)
+						//}
+					}
+				}
+			} else if (str.isEmpty()) {
+				throw IllegalStateException("猹返回内容为空：Code:${response.code}\nBody:${str}")
+			} else {
+				throw IllegalStateException("猹返回无效：Code:${response.code}\nBody:${str}")
+			}
 		}
-		WannaHomeKt.logger.info { "结束获取猹：${SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(Calendar.getInstance().time.time)}" }
+		//WannaHomeKt.logger.info { "结束获取猹：${SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(Calendar.getInstance().time.time)}" }
 		return voteInfoMap
 	}
 

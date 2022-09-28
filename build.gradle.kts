@@ -1,8 +1,6 @@
 group = "cn.status102"
 version = "0.1.1"
 
-
-
 plugins {
 	val kotlinVersion = "1.7.10"
 	kotlin("jvm") version kotlinVersion
@@ -17,7 +15,7 @@ plugins {
 	//id("org.jetbrains.compose") version "1.2.1-dev-k1.7.10-27cf0868d10"
 	//id("org.jetbrains.compose") version "1.2.0-beta01"
 	id("net.mamoe.mirai-console") version "2.12.0"
-	id("com.github.johnrengelman.shadow") version "7.1.2"
+	//id("com.github.johnrengelman.shadow") version "7.1.2"
 	//id("org.jetbrains.compose") version "1.2.0-alpha01-dev741"
 	//id("me.him188.maven-central-publish") version "1.0.0-dev-3"
 }
@@ -42,8 +40,7 @@ val skikoVersion = "0.7.32"
 val target = "${targetOs}-${targetArch}"
 
 dependencies {
-	//implementation("org.jetbrains.skiko:skiko-awt-runtime-linux-x64:0.7.32")
-	//implementation("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.7.32")
+	implementation("io.github.g0dkar:qrcode-kotlin-jvm:3.2.0")
 	implementation("org.jetbrains.skiko:skiko-awt-runtime-$target:$skikoVersion")
 	//shadowLink("org.jetbrains.skiko:skiko-awt-runtime-windows-x64")
 }

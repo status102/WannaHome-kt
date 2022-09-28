@@ -50,7 +50,7 @@ class HouseInfo : VoteInfoOperate {
 			return client.newCall(newRequest(serverId))
 		}
 
-		suspend  fun call(serverId: Int, reCallTimes: Int = 0, reCallTimesLimit: Int = 3): Response {
+		suspend fun call(serverId: Int, reCallTimes: Int = 0, reCallTimesLimit: Int = 3): Response {
 			try {
 				return newCall(serverId).execute().apply {
 					if (networkResponse != null)
@@ -60,11 +60,11 @@ class HouseInfo : VoteInfoOperate {
 				if (reCallTimes < reCallTimesLimit) {
 					CallTimes++
 					FailTimes++
-					delay(1000)
+					delay(3000)
 					WannaHomeKt.logger.error { "冰音获取错误：$e\n${e.stackTraceToString()}" }
 					return call(serverId, reCallTimes + 1)
-				}
-				throw e
+				} else
+					throw e
 			} catch (e: Exception) {
 				CallTimes++
 				FailTimes++
@@ -76,34 +76,36 @@ class HouseInfo : VoteInfoOperate {
 	private val jsonDecoder: Json by lazy {
 		Json { ignoreUnknownKeys = true }
 	}
+	override val sourceName: String = "HouseHelper(冰音)"
 
 	override suspend fun run(serverId: Int, lastTurnStart: Long, thisTurnStart: Long): Map<String, PlotInfo> {
 		//WannaHomeKt.logger.info { "开始获取冰音：${SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(Calendar.getInstance().time.time)}" }
 
 		val voteInfoMap = mutableMapOf<String, PlotInfo>()
-		try {
-			val startTimeStamp = Calendar.getInstance().timeInMillis
-			call(serverId).use { response ->
-				val str = response.body?.string() ?: ""
-				if (response.networkResponse != null) {
-					TimeMillis += Calendar.getInstance().timeInMillis - startTimeStamp
+		val startTimeStamp = Calendar.getInstance().timeInMillis
+		call(serverId).use { response ->
+			val str = response.body?.string() ?: ""
+			if (response.networkResponse != null) {
+				TimeMillis += Calendar.getInstance().timeInMillis - startTimeStamp
 
-					if (response.headers["last-modified"] != null)
-						LastModified = response.headers["last-modified"]!!
-				}
-				if (response.isSuccessful && str.isNotEmpty()) {
-					val saleList = jsonDecoder.decodeFromString<ServerData>(str)
-					if (saleList.LastUpdate >= thisTurnStart)
-						saleList.OnSale.forEach {
+				if (response.headers["last-modified"] != null)
+					LastModified = response.headers["last-modified"]!!
+			}
+			if (response.isSuccessful && str.isNotEmpty()) {
+				val saleList = jsonDecoder.decodeFromString<ServerData>(str)
+				val lastShow = lastTurnStart + 5 * 24 * 3600
+				if (saleList.LastUpdate >= thisTurnStart)
+					saleList.OnSale
+						//.filter { it.StartSell >= lastShow }
+						.forEach {
 							voteInfoMap["$serverId-${it.TerritoryId}-${it.WardId}-${it.HouseId}"] =
 								PlotInfo(serverId, it.TerritoryId, it.WardId, it.HouseId, it.Size - 1, saleList.LastUpdate)
 						}
-				} else {
-					WannaHomeKt.logger.error { "冰音获取错误：Code:${response.code}\nBody:${str}" }
-				}
+			} else if (str.isEmpty()) {
+				throw IllegalStateException("冰音返回内容为空：Code:${response.code}\nBody:${str}")
+			} else {
+				throw IllegalStateException("冰音返回无效：Code:${response.code}\nBody:${str}")
 			}
-		} catch (e: Exception) {
-			WannaHomeKt.logger.error { "冰音获取错误：$e\n${e.stackTraceToString()}" }
 		}
 		//WannaHomeKt.logger.info { "结束获取冰音：${SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(Calendar.getInstance().time.time)}" }
 		return voteInfoMap

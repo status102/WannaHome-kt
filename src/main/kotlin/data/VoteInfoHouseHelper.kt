@@ -7,6 +7,7 @@ import cn.status102.data.VoteInfoHouseHelper.Companion.Logger.CallTimes
 import cn.status102.data.VoteInfoHouseHelper.Companion.Logger.FailTimes
 import cn.status102.data.VoteInfoHouseHelper.Companion.Logger.TimeMillis
 import cn.status102.territoryMap
+import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -50,7 +51,7 @@ class VoteInfoHouseHelper : VoteInfoOperate {
 			return client.newCall(newRequest(serverId))
 		}
 
-		fun call(serverId: Int, reCallTimes: Int = 0, reCallTimesLimit: Int = 3): Response {
+		suspend fun call(serverId: Int, reCallTimes: Int = 0, reCallTimesLimit: Int = 3): Response {
 			try {
 				return newCall(serverId).execute().apply {
 					if (this.networkResponse != null)
@@ -61,6 +62,7 @@ class VoteInfoHouseHelper : VoteInfoOperate {
 					CallTimes++
 					FailTimes++
 					WannaHomeKt.logger.error { "HouseHelper获取错误：$e\n${e.stackTraceToString()}" }
+					delay(3000)
 					return call(serverId, reCallTimes + 1)
 				}
 				throw e
@@ -75,46 +77,51 @@ class VoteInfoHouseHelper : VoteInfoOperate {
 	private val jsonDecoder: Json by lazy {
 		Json { ignoreUnknownKeys = true }
 	}
+	override val sourceName: String = "HouseHelper(Jim)"
 
 	override suspend fun run(serverId: Int, lastTurnStart: Long, thisTurnStart: Long): Map<String, PlotInfo> {
 		//WannaHomeKt.logger.info { "开始获取HouseHelper：${SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(Calendar.getInstance().time.time)}" }
 
 		val voteInfoMap = mutableMapOf<String, PlotInfo>()
-		try {
-			val startTimeStamp = Calendar.getInstance().timeInMillis
-			call(serverId).use { response ->
-				val str = response.body?.string() ?: ""
-				if (response.networkResponse != null) {
-					TimeMillis += Calendar.getInstance().timeInMillis - startTimeStamp
-					if (response.headers["last-modified"] != null)
-						LastModified = response.headers["last-modified"]!!
-				}
-				if (response.isSuccessful && str.isNotEmpty()) {
-					val voteInfoList = jsonDecoder.decodeFromString<List<VoteInfo>>(str)
-
-					voteInfoList.filter { voteInfo ->
-						voteInfo.LastSeen >= thisTurnStart || (voteInfo.UpdateTime >= lastTurnStart && voteInfo.State in 2..3)
-					}.forEach {
-						it.TerritoryId = territoryMap.keys.toList()[it.TerritoryId]//将房区序号改为房区ID
-						voteInfoMap.run {
-							if (containsKey("${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}")) {
-								if (this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"]!!.Update < it.UpdateTime || this["${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"]!!.SaleState == 0) {
-									this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"]!!.VoteCount = it.VoteCount
-									this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"]!!.WinnerIndex = it.WinnerIndex
-									this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"]!!.SaleState = it.State
-									this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"]!!.Update = it.UpdateTime
-								}
-							} else {
-								this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"] = PlotInfo(serverId, it.TerritoryId, it.WardId, it.houseNum - 1, it.Size, it.UpdateTime, it.State, it.VoteCount, it.WinnerIndex)
-							}
-						}
-					}
-				} else {
-					WannaHomeKt.logger.error { "HouseHelper获取错误：Code:${response.code}\nBody:${response}" }
-				}
+		val startTimeStamp = Calendar.getInstance().timeInMillis
+		call(serverId).use { response ->
+			val str = response.body?.string() ?: ""
+			if (response.networkResponse != null) {
+				TimeMillis += Calendar.getInstance().timeInMillis - startTimeStamp
+				if (response.headers["last-modified"] != null)
+					LastModified = response.headers["last-modified"]!!
 			}
-		} catch (e: Exception) {
-			WannaHomeKt.logger.error { "HouseHelper获取错误：$e\n${e.stackTraceToString()}" }
+			if (response.isSuccessful && str.isNotEmpty()) {
+				val voteInfoList = jsonDecoder.decodeFromString<List<VoteInfo>>(str)
+
+				voteInfoList.filter { voteInfo ->
+					voteInfo.LastSeen >= thisTurnStart || (voteInfo.UpdateTime >= lastTurnStart && voteInfo.State == 3)
+				}.forEach {
+					it.TerritoryId = territoryMap.keys.toList()[it.TerritoryId]//将房区序号改为房区ID
+					voteInfoMap.run {
+						//if (it.WardId == 16 && it.houseNum == 36)
+							//WannaHomeKt.logger.info { "临时测试：${it.TerritoryId} ${it.WardId + 1}-${it.houseNum} ${it.State}(${it.VoteCount}/${it.WinnerIndex})：${unixTimeToStr(it.UpdateTime)}" }
+
+						/*if (containsKey("${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}")) {
+							if (this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"]!!.Update < it.UpdateTime || this["${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"]!!.SaleState == 0) {
+								this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"]!!.VoteCount = it.VoteCount
+								this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"]!!.WinnerIndex = it.WinnerIndex
+								this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"]!!.SaleState = it.State
+								this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"]!!.Update = it.UpdateTime
+							}
+						} else {*/
+						if(it.UpdateTime < thisTurnStart && it.LastSeen >= thisTurnStart)
+							this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"] = PlotInfo(serverId, it.TerritoryId, it.WardId, it.houseNum - 1, it.Size, it.LastSeen, 0, 0, 0)
+						else
+							this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"] = PlotInfo(serverId, it.TerritoryId, it.WardId, it.houseNum - 1, it.Size, it.UpdateTime, it.State, it.VoteCount, it.WinnerIndex)
+						//}
+					}
+				}
+			} else if (str.isEmpty()) {
+				throw IllegalStateException("HouseHelper返回内容为空：Code:${response.code}\nBody:${str}")
+			} else {
+				throw IllegalStateException("HouseHelper返回无效：Code:${response.code}\nBody:${str}")
+			}
 		}
 		//WannaHomeKt.logger.info { "结束获取HouseHelper：${SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(Calendar.getInstance().time.time)}" }
 		return voteInfoMap
@@ -127,11 +134,20 @@ class VoteInfoHouseHelper : VoteInfoOperate {
 		var TerritoryId: Int,
 		@SerialName("Slot")
 		val WardId: Int,
+		/**
+		 * 房屋号，从1开始
+		 */
 		@SerialName("ID")
 		val houseNum: Int,
 		val Price: Int,
 		val Size: Int,
+		/**
+		 * 房屋在大水晶被看到，秒为单位
+		 */
 		val FirstSeen: Long,
+		/**
+		 * 房屋在大水晶被看到，秒为单位
+		 */
 		val LastSeen: Long,
 		val State: Int,
 		@SerialName("Participate")
@@ -139,6 +155,9 @@ class VoteInfoHouseHelper : VoteInfoOperate {
 		@SerialName("Winner")
 		val WinnerIndex: Int,
 		val EndTime: Int,
+		/**
+		 * 房屋详细信息更新时间，秒为单位
+		 */
 		val UpdateTime: Long,
 		val PurchaseType: Int,
 		val RegionType: Int,
