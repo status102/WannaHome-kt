@@ -327,7 +327,7 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 
 	val channel = WannaCommand.getHouseData(serverList, lastTurnStart, thisTurnStart)
 	val successCount = MutableList(HouseDataList.size) { 0 }
-	withTimeoutOrNull(40_000 ) {
+	withTimeoutOrNull(40_000) {
 		repeat(HouseDataList.size * serverList.size) {
 			channel.receiveCatching().run {
 				if (isSuccess) {
@@ -468,9 +468,9 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 
 	val outputFc = mutableListOf<String>()
 	val fcSizeStr = mutableListOf<String>().run {
-		if (fcList.any { it.Size == 0 }) add(String.format("S %,d", fcList.filter { it.Size == 0 }.size))
-		if (fcList.any { it.Size == 1 }) add(String.format("M %,d", fcList.filter { it.Size == 1 }.size))
-		if (fcList.any { it.Size == 2 }) add(String.format("L %,d", fcList.filter { it.Size == 2 }.size))
+		if (fcList.any { it.Size == 0 }) add(String.format("S %,d", fcList.count { it.Size == 0 }))
+		if (fcList.any { it.Size == 1 }) add(String.format("M %,d", fcList.count { it.Size == 1 }))
+		if (fcList.any { it.Size == 2 }) add(String.format("L %,d", fcList.count { it.Size == 2 }))
 		if (isNotEmpty()) joinTo(StringBuilder(), "/", "(", ")")
 		else ""
 	}
@@ -491,15 +491,28 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 		outputBottom.add("数据上传方式使用“/空地”查看数据源网站")
 	//多服务器查询时，打印每个服务器的数量
 	if (serverList.size != 1) {
-		val plotListPerServer = plotList.groupBy { it.ServerId }.mapKeys { serverNameMap[it.key]!! }
-		val houseNumAllServer = mutableListOf<String>()
-		plotListPerServer.forEach { pair ->
-			val perServer = mutableListOf<String>()
-			if (pair.value.any { it.Size == 0 }) perServer.add("S ${pair.value.count { it.Size == 0 }}")
-			if (pair.value.any { it.Size == 1 }) perServer.add("M ${pair.value.count { it.Size == 1 }}")
-			if (pair.value.any { it.Size == 2 }) perServer.add("L ${pair.value.count { it.Size == 2 }}")
-			houseNumAllServer.add(perServer.joinTo(StringBuilder(), "/", "${pair.key.take(2)}(", ")").toString())
+		val plotListPerServer = plotList.groupBy { it.ServerId }.mapKeys { serverNameMap[it.key]!! }.run {
+			this.toSortedMap(
+				Comparator<String> { a, b ->
+					if (this[a]!!.any { it.Size == 2 } && this[b]!!.any { it.Size == 2 }) {
+						this[b]!!.count { it.Size == 2 } - this[a]!!.count { it.Size == 2 }
+					} else if (this[a]!!.any { it.Size == 1 } && this[b]!!.any { it.Size == 1 }) {
+						this[b]!!.count { it.Size == 1 } - this[a]!!.count { it.Size == 1 }
+					} else
+						this[b]!!.count { it.Size == 0 } - this[a]!!.count { it.Size == 0 }
+				}
+				//compareBy({ this[it]?.count { plotInfo -> plotInfo.Size == 2 } }, { this[it]?.count { plotInfo -> plotInfo.Size == 1 } }, { this[it]?.count { plotInfo -> plotInfo.Size == 0 } })
+			)
 		}
+		val houseNumAllServer = mutableListOf<String>()
+		plotListPerServer
+			.forEach { pair ->
+				val perServer = mutableListOf<String>()
+				if (pair.value.any { it.Size == 0 }) perServer.add("S ${pair.value.count { it.Size == 0 }}")
+				if (pair.value.any { it.Size == 1 }) perServer.add("M ${pair.value.count { it.Size == 1 }}")
+				if (pair.value.any { it.Size == 2 }) perServer.add("L ${pair.value.count { it.Size == 2 }}")
+				houseNumAllServer.add(perServer.joinTo(StringBuilder(), "/", "${pair.key.take(2)}(", ")").toString())
+			}
 
 		outputBottom.addAll(houseNumAllServer.chunked(4) { it.joinTo(StringBuilder(), ", ").toString() })
 	}
@@ -1199,13 +1212,13 @@ fun changeBotGroupNameCard(group: Group, canEntry: Boolean, nextEventTimeStr: St
 	}
 }
 
-fun diffTimeToStr(diff: Long, showMillis: Boolean = true, showDays: Boolean = false):String{
+fun diffTimeToStr(diff: Long, showMillis: Boolean = true, showDays: Boolean = false): String {
 	val diffSec = diff / 1000
-	val left = if(showDays)
-		String.format("%,d日 %d:%02d:%02d", diffSec / 24 / 3600,(diffSec / 3600) % 24, (diffSec / 60) % 60, diffSec % 60)
+	val left = if (showDays)
+		String.format("%,d日 %d:%02d:%02d", diffSec / 24 / 3600, (diffSec / 3600) % 24, (diffSec / 60) % 60, diffSec % 60)
 	else
-		 String.format("%,d:%02d:%02d", diffSec / 3600, (diffSec / 60) % 60, diffSec % 60)
-	if(showMillis)
+		String.format("%,d:%02d:%02d", diffSec / 3600, (diffSec / 60) % 60, diffSec % 60)
+	if (showMillis)
 		return String.format("${left}.%03d", diff % 1000)
 	return left
 }
