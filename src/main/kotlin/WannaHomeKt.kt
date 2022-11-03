@@ -2,8 +2,6 @@ package cn.status102
 
 import cn.status102.Config.subNameMap
 import cn.status102.data.*
-import io.github.g0dkar.qrcode.QRCode
-import io.github.g0dkar.qrcode.render.Colors
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import net.mamoe.mirai.Bot
@@ -22,10 +20,8 @@ import net.mamoe.mirai.contact.nameCardOrNick
 import net.mamoe.mirai.contact.remarkOrNameCardOrNick
 import net.mamoe.mirai.event.GlobalEventChannel
 import net.mamoe.mirai.event.events.*
-import net.mamoe.mirai.message.data.MessageChain
+import net.mamoe.mirai.message.data.*
 import net.mamoe.mirai.message.data.MessageSource.Key.quote
-import net.mamoe.mirai.message.data.PlainText
-import net.mamoe.mirai.message.data.toMessageChain
 import net.mamoe.mirai.utils.ExternalResource.Companion.toExternalResource
 import net.mamoe.mirai.utils.ExternalResource.Companion.uploadAsImage
 import net.mamoe.mirai.utils.error
@@ -45,28 +41,63 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.roundToLong
-import kotlin.random.Random
 
 
-public val Limit_Person = 15..30
-public val Limit_FC = 15..30
+public val Limit_Person = 20..40
+public val Limit_FC = 20..40
 public const val fcIdStart = 16//个人区1~16，对应ID 0~15
 val Merge_Left = 10F
-val Merge_Right = 10F
+val Merge_Right = 15F
 val Merge_Up = 10F
 val Merge_Down = 10F
 val Merge_Mid = 20F
+
+var lastListened = Calendar.getInstance().timeInMillis
+
+/**
+ * 警报状态：0 正常，1 预警预备， 2 发送警报
+ * 状态取消时私聊提醒已取消
+ */
+var warningState = 0
+
+var loaded = false
+const val warningMinute = 36 * 60
+const val lostMinute = 24 * 60 * 5
+const val warnIntervalMinute = 60
+const val warningTips = "已经超过%time未监测到（3122262428）发出的消息"
+const val lostTips = "已经超过%time未监测到（3122262428）发出的消息，认定为失联状态（本消息由BOT自动发出，请勿回复，本消息只发送一次）"
+const val listenId = 3122262428
+val warningGroup = listOf(
+	877716359L,// 小测
+	//1031814158L// 亲友
+)
+val warningFriend = listOf(
+	1021263881,
+	3122262428
+)
+val lostGroup = listOf(
+	877716359L,// 小测
+	1031814158,// 亲友
+	917243835,// 部队
+	730395259,// 豆芽群
+)
+val lostFriend = listOf(
+	1021263881,
+	3122262428,
+	3399430069,// 猹
+)
+
 
 public val HouseDataList = listOf(HouseInfo(), VoteInfoCha(), VoteInfoHouseHelper())
 
 /**
  * 超过8小时数据未更新
  */
-public const val outdatedWarn: Long = 12 * 60 * 60//
+public const val outdatedWarn: Long = 24 * 60 * 60//
 public const val outdatedWarnChar = "※"
 public const val outdatedWarnTips = "未更新数据"
 
-public val showTipsGroup = setOf<Long>(
+public val houseTipsGroup = setOf<Long>(
 	1074761017,//海猫房群
 	299803462,//琥珀房群
 )
@@ -74,16 +105,16 @@ public val showTipsGroup = setOf<Long>(
 //region 缓存路径
 public val cacheDir = File("${WannaHomeKt.dataFolderPath}${File.separatorChar}okhttpCache")
 public val imageDir = File("${WannaHomeKt.dataFolderPath}${File.separatorChar}map")
-public val client = OkHttpClient.Builder().cache(Cache(cacheDir, 100 * 1024 * 1024)).connectTimeout(30, TimeUnit.SECONDS).build()
+public val client = OkHttpClient.Builder()
+	.cache(Cache(cacheDir, 100 * 1024 * 1024))
+	.connectTimeout(8, TimeUnit.SECONDS).build()
 
 //endregion
 var font: Font? = null
 
 public object WannaHomeKt : KotlinPlugin(
 	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.1.1")
-	{
-		author("status102")
-	}
+	{ author("status102") }
 ) {
 	override fun onEnable() {
 		Config.reload()
@@ -109,37 +140,25 @@ public object WannaHomeKt : KotlinPlugin(
 		eventChannel.subscribeAlways<NewFriendRequestEvent> {
 			if (this.bot.id == 3165860596)
 				this.bot.getFriend(3122262428)?.sendMessage("${fromNick}[${fromId}]发来的好友申请：${message}")
-			//自动同意好友申请
-			/*Bot.instances.forEach {
-				it.getFriend(3122262428)?.sendMessage("${fromNick}[${fromId}]发来的好友申请：${message}")
-			}*/
+			else if (this.bot.id == 2546619872)
+				this.accept()
 		}
 		eventChannel.subscribeAlways<BotInvitedJoinGroupRequestEvent> {
 			if (this.bot.id == 3165860596)
 				this.bot.getFriend(3122262428)?.sendMessage("${invitorNick}[${invitorId}]邀请加入${this.groupName}[${this.groupId}]")
-			//自动同意加群申请
-			/*Bot.instances.forEach {
-				it.getFriend(3122262428)?.sendMessage("${invitorNick}[${invitorId}]邀请加入${this.groupName}[${this.groupId}]")
-			}*/
+			else if (this.bot.id == 2546619872)
+				this.accept()
 		}
 		eventChannel.subscribeAlways<BotLeaveEvent> {
 			if (this is BotLeaveEvent.Kick) {
 				if (this.bot.id == 3165860596)
 					this.bot.getFriend(3122262428)?.sendMessage("Bot被${operator.remarkOrNameCardOrNick}[${operator.id}]踢出了${group.name}[${group.id}]")
-				//自动同意加群申请
-				/*Bot.instances.forEach {
-					it.getFriend(3122262428)?.sendMessage("Bot被${operator.remarkOrNameCardOrNick}[${operator.id}]踢出了${group.name}[${group.id}]")
-				}*/
 			}
 		}
 		eventChannel.subscribeAlways<BotMuteEvent> {
 			if (this.bot.id == 3165860596)
 				this.bot.getFriend(3122262428)?.sendMessage("${operator.remarkOrNameCardOrNick}[${operator.id}]在${group.name}[${group.id}]禁言了bot，时长：" + String.format("%d day %d:%02d:%02d", durationSeconds / 24 / 3600, (durationSeconds / 3600) % 24, (durationSeconds / 60) % 60, durationSeconds % 60))
 
-			//BOT被禁言
-			/*Bot.instances.forEach {
-				it.getFriend(3122262428)?.sendMessage("${operator.remarkOrNameCardOrNick}[${operator.id}]在${group.name}[${group.id}]禁言了bot，时长：" + String.format("%d day %d:%02d:%02d", durationSeconds / 24 / 3600, (durationSeconds / 3600) % 24, (durationSeconds / 60) % 60, durationSeconds % 60))
-			}*/
 		}
 		eventChannel.subscribeAlways<BotUnmuteEvent> {
 			if (this.bot.id == 3165860596)
@@ -154,6 +173,8 @@ public object WannaHomeKt : KotlinPlugin(
 			this.message.forEach {
 				if (it is PlainText) {
 					if (it.content == "/空地") {
+						this.message.metadataList()
+						it.toMessageChain().quote()
 						WannaCommand.handle(Cont(this.message, toCommandSender()))
 					} else if (it.content == "/空地 简称") {
 						WannaCommand.sendServerNickName(Cont(this.message, toCommandSender()))
@@ -163,7 +184,40 @@ public object WannaHomeKt : KotlinPlugin(
 				}
 			}
 		}
-		initSendNote()
+		eventChannel.subscribeAlways<BotOnlineEvent> {
+			if (this.bot.id == 3165860596) {
+				logger.info { "确认自用主机，已开始监听" }
+				lastListened = Calendar.getInstance().timeInMillis
+				initListenOwner(this.bot)
+			}
+		}
+		eventChannel.subscribeAlways<MessageEvent> {
+			/*	if (!loaded) {
+					synchronized(initLock) {
+						if (!loaded) {
+							Bot.instances.forEach {
+								if (it.id == 3165860596) {
+									logger.info { "确认自用主机，已开始监听" }
+									initListenOwner(it)
+								}
+							}
+						}
+						loaded = true
+					}
+				}
+	*/
+			if (sender.id == listenId) {
+				if (warningState != 0) {
+					var diff = Calendar.getInstance().timeInMillis - lastListened
+					diff /= 1000
+					bot.getFriend(listenId)?.sendMessage("监听警告状态已解除，距离上次监听已经过去" + String.format("%,dday %d:%02d:02d", diff / 3600 / 24, (diff / 3600) % 24, (diff / 60) % 60, diff % 60))
+					warningState = 0
+				}
+				logger.info { "监听到对象" }
+				lastListened = Calendar.getInstance().timeInMillis
+			}
+		}
+		initNote()
 	}
 
 	override fun onDisable() {
@@ -197,15 +251,22 @@ suspend fun getEmptyPlace(commandContext: CommandContext, ss: String) {
 			val filter = serverIdMap.keys.filter { it.contains(str) }
 			if (ss.length >= 2 && filter.size == 1) {
 				if (commandContext.sender.isNotConsole())
-					commandContext.sender.sendMessage(commandContext.originalMessage.quote() + "未知服务器，推测为：${filter[0]}")
+					commandContext.sender.sendMessage(commandContext.originalMessage.quote() + "未知服务器，推测为<${filter[0]}>，正在获取数据中，请耐心等待\"")
 				else
-					println("未知服务器，推测为：${filter[0]}")
+					println("未知服务器，推测为<${filter[0]}>，正在获取数据中，请耐心等待")
 				serverList.add(filter[0])
 			} else
 				limitStr.append(str)
 		}
 	}
-	WannaCommand.handle(commandContext, serverList, limitStr.toString())
+	try {
+		WannaCommand.handle(commandContext, serverList, limitStr.toString())
+	} catch (e: Exception) {
+		WannaHomeKt.logger.error { "解析执行错误：${e}\n${e.stackTraceToString()}" }
+		if (commandContext.sender.isNotConsole())
+			commandContext.sender.sendMessage(commandContext.originalMessage.quote() + "解析执行错误：${e}")
+
+	}
 }
 
 public class Cont(override val originalMessage: MessageChain, override val sender: CommandSender) : CommandContext
@@ -246,7 +307,7 @@ fun trans(nowTimeStamp: Long, outdatedLimit: Long, showServerName: Boolean): (Pl
 		output.toString()
 	}
 
-suspend fun getPic(serverName: String, searchList: List<Int>, groupId: Long = 0, limitStr: String): Surface {
+suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0, limitStr: String): Surface {
 
 	val now = Calendar.getInstance().timeInMillis / 1000
 	val start = Calendar.getInstance().apply { time = strTimeToDate("2022-08-08 23:00:00") }
@@ -264,34 +325,43 @@ suspend fun getPic(serverName: String, searchList: List<Int>, groupId: Long = 0,
 	}
 	val plotInfoMap = mutableMapOf<String, PlotInfo>()
 
-	val channel = WannaCommand.getHouseData(searchList, lastTurnStart, thisTurnStart)
+	val channel = WannaCommand.getHouseData(serverList, lastTurnStart, thisTurnStart)
 	val successCount = MutableList(HouseDataList.size) { 0 }
-	repeat(HouseDataList.size * searchList.size) {
-		channel.receive().run {
-			if (second) successCount[HouseDataList.indexOfFirst { it::class == first::class }]++
-			third.forEach { (key, it) ->
-				//if(it.WardId == 16 && it.HouseId == 35)
-				//WannaHomeKt.logger.info{"临时测试：${it.TerritoryId} ${it.WardId + 1}-${it.HouseId + 1} ${it.SaleState}(${it.VoteCount}/${it.WinnerIndex})：${unixTimeToStr(it.Update)}：${this.first.javaClass}"}
-				if (plotInfoMap.containsKey(key)) {
-					if (plotInfoMap[key]!!.SaleState == 0 ||
-						(it.Update > plotInfoMap[key]!!.Update &&
-								((it.Update >= thisTurnStart && plotInfoMap[key]!!.Update < thisTurnStart) || it.SaleState != 0))
-					) {
-						plotInfoMap[key]!!.VoteCount = it.VoteCount
-						plotInfoMap[key]!!.WinnerIndex = it.WinnerIndex
-						plotInfoMap[key]!!.SaleState = it.SaleState
-						plotInfoMap[key]!!.Update = it.Update
+	withTimeoutOrNull(40_000 ) {
+		repeat(HouseDataList.size * serverList.size) {
+			channel.receiveCatching().run {
+				if (isSuccess) {
+					getOrNull()?.run {
+						//WannaHomeKt.logger.info { "${third.size}个：${first::class}" }
+						if (second) successCount[HouseDataList.indexOfFirst { it::class == first::class }]++
+						third.forEach { (key, it) ->
+							//if(it.WardId == 0 && it.HouseId == 1 && it.Size == 1)
+							//WannaHomeKt.logger.info{"临时测试：${it.TerritoryId} ${it.WardId + 1}-${it.HouseId + 1} ${it.SaleState}(${it.VoteCount}/${it.WinnerIndex})：${unixTimeToStr(it.Update)}：${this.first.javaClass}"}
+							if (plotInfoMap.containsKey(key)) {
+								if (plotInfoMap[key]!!.SaleState == 0 ||
+									(it.Update > plotInfoMap[key]!!.Update &&
+											((it.Update >= thisTurnStart && plotInfoMap[key]!!.Update < thisTurnStart) || it.SaleState != 0))
+								) {
+									plotInfoMap[key]!!.VoteCount = it.VoteCount
+									plotInfoMap[key]!!.WinnerIndex = it.WinnerIndex
+									plotInfoMap[key]!!.SaleState = it.SaleState
+									plotInfoMap[key]!!.Update = it.Update
+								}
+							} else {
+								plotInfoMap[key] = it
+							}
+						}
 					}
 				} else {
-					plotInfoMap[key] = it
+					WannaHomeKt.logger.error { exceptionOrNull()?.message + "\n" + exceptionOrNull()?.stackTraceToString() }
 				}
 			}
 		}
 	}
 	channel.close()
 
-	val plotList = plotInfoMap.values.toMutableList()
-	val showServerName = searchList.size > 1
+	var plotList = plotInfoMap.values.toMutableList()
+	val showServerName = serverList.size > 1
 
 	val font = Font(font?.typefaceOrDefault)
 	font.size = 24f
@@ -307,10 +377,18 @@ suspend fun getPic(serverName: String, searchList: List<Int>, groupId: Long = 0,
 			it.Update = thisTurnStart
 			it.SaleState = 0
 		}
+		if (it.SaleState == 0) {
+			it.VoteCount = -2
+			it.WinnerIndex = -2
+		} else if (it.SaleState == 3) {
+			it.VoteCount = -1
+			it.WinnerIndex = -1
+		}
 	}
+	plotList = plotList.filter { it.Update >= lastTurnStart && (it.SaleState == 0 || it.Update >= thisTurnStart) }.toMutableList()
 
-	var personList = plotList.filter { it.Update >= lastTurnStart && it.WardId < fcIdStart && (it.SaleState == 0 || it.Update >= thisTurnStart) }
-	var fcList = plotList.filter { it.Update >= lastTurnStart && it.WardId >= fcIdStart && (it.SaleState == 0 || it.Update >= thisTurnStart) }
+	var personList = plotList.filter { it.WardId < fcIdStart }
+	var fcList = plotList.filter { it.WardId >= fcIdStart }
 
 	if (limitStr.isNotEmpty()) {
 		//单独查询个人房or部队房
@@ -330,15 +408,20 @@ suspend fun getPic(serverName: String, searchList: List<Int>, groupId: Long = 0,
 			fcList = fcList.filter { limitStr.contains(territoryMap[it.TerritoryId] ?: "") }
 		}
 	}
-	personList = personList.run { sortedBy { it.WardId * 60 + it.HouseId }.sortedBy { it.TerritoryId }.sortedByDescending { it.Size }.sortedByDescending { it.VoteCount } }
-	fcList = fcList.run { sortedBy { it.WardId * 60 + it.HouseId }.sortedBy { it.TerritoryId }.sortedByDescending { it.Size }.sortedByDescending { it.VoteCount } }
+	personList = personList.run { asSequence().sortedBy { it.WardId * 60 + it.HouseId }.sortedBy { it.TerritoryId }.sortedBy { it.ServerId }.sortedByDescending { it.VoteCount }.sortedByDescending { it.Size }.toList() }
+	fcList = fcList.run { asSequence().sortedBy { it.WardId * 60 + it.HouseId }.sortedBy { it.TerritoryId }.sortedBy { it.ServerId }.sortedByDescending { it.VoteCount }.sortedByDescending { it.Size }.toList() }
 
 
-	val personLarge = personList.indexOfFirst { it.Size > 0 }
-	val fcLarge = fcList.indexOfFirst { it.Size > 0 }
-	val personShow = if (personLarge in Limit_Person) personLarge else if (personLarge > Limit_Person.last) Limit_Person.last else Limit_Person.first
-	val fcShow = if (fcLarge in Limit_FC) fcLarge else if (fcLarge > Limit_FC.last) Limit_FC.last else Limit_FC.first
+	val personLarge = personList.indexOfLast { it.Size > 0 } + 1
+	val fcLarge = fcList.indexOfLast { it.Size > 0 } + 1
+	var personShow =
+		if (personLarge in Limit_Person) personLarge
+		else if (personLarge > Limit_Person.last) Limit_Person.last
+		else Limit_Person.first
+	var fcShow = if (fcLarge in Limit_FC) fcLarge else if (fcLarge > Limit_FC.last) Limit_FC.last else Limit_FC.first
 
+	personShow = maxOf(personShow, fcShow)
+	fcShow = maxOf(personShow, fcShow)
 	/**
 	 * 参与人数过期时间，单位为秒
 	 */
@@ -372,12 +455,26 @@ suspend fun getPic(serverName: String, searchList: List<Int>, groupId: Long = 0,
 	val textTitle = outputTitle.map { Pair(TextLine.make(it, font), black) }
 
 	val outputPerson = mutableListOf<String>()
-	if (!limitStr.contains("个人") && personList.isNotEmpty()) outputPerson.add("个人：${personList.size}")
+	val personSizeStr = mutableListOf<String>().run {
+		if (personList.any { it.Size == 0 }) add(String.format("S %,d", personList.filter { it.Size == 0 }.size))
+		if (personList.any { it.Size == 1 }) add(String.format("M %,d", personList.filter { it.Size == 1 }.size))
+		if (personList.any { it.Size == 2 }) add(String.format("L %,d", personList.filter { it.Size == 2 }.size))
+		if (isNotEmpty()) joinTo(StringBuilder(), "/", "(", ")")
+		else ""
+	}
+	if (!limitStr.contains("个人") && personList.isNotEmpty()) outputPerson.add(String.format("个人：%,d %s", personList.size, personSizeStr))
 	outputPerson.addAll(personTextList)
 	val textPerson = outputPerson.map { if (it.startsWith(outdatedWarnChar)) Pair(TextLine.make(it.substring(1), font), grey) else Pair(TextLine.make(it, font), black) }
 
 	val outputFc = mutableListOf<String>()
-	if (!limitStr.contains("部队") && fcList.isNotEmpty()) outputFc.add("部队：${fcList.size}")
+	val fcSizeStr = mutableListOf<String>().run {
+		if (fcList.any { it.Size == 0 }) add(String.format("S %,d", fcList.filter { it.Size == 0 }.size))
+		if (fcList.any { it.Size == 1 }) add(String.format("M %,d", fcList.filter { it.Size == 1 }.size))
+		if (fcList.any { it.Size == 2 }) add(String.format("L %,d", fcList.filter { it.Size == 2 }.size))
+		if (isNotEmpty()) joinTo(StringBuilder(), "/", "(", ")")
+		else ""
+	}
+	if (!limitStr.contains("部队") && fcList.isNotEmpty()) outputFc.add(String.format("部队：%,d %s", fcList.size, fcSizeStr))
 	outputFc.addAll(fcTextList)
 	val textFc = outputFc.map { if (it.startsWith(outdatedWarnChar)) Pair(TextLine.make(it.substring(1), font), grey) else Pair(TextLine.make(it, font), black) }
 
@@ -385,19 +482,34 @@ suspend fun getPic(serverName: String, searchList: List<Int>, groupId: Long = 0,
 	outputBottom.add("")
 	if ((outputPerson + outputFc).any { it.contains(outdatedWarnChar) }) outputBottom.add(outdatedWarnChar + outdatedTime + outdatedWarnTips)
 	if (personList.size > personTextList.size || fcList.size > fcTextList.size) {
-		if (showTipsGroup.contains(groupId)) {
+		if (houseTipsGroup.contains(groupId)) {
 			outputBottom.add("更多空地请查阅群公告中网站")
 			outputBottom.add("数据上传方式使用“/空地”查询数据源网站，并获取对应上传方式")
 		} else
 			outputBottom.add("更多空地及数据上传方式使用“/空地”查询")
 	} else
 		outputBottom.add("数据上传方式使用“/空地”查看数据源网站")
-	if (successCount.any { it != searchList.size }) {
+	//多服务器查询时，打印每个服务器的数量
+	if (serverList.size != 1) {
+		val plotListPerServer = plotList.groupBy { it.ServerId }.mapKeys { serverNameMap[it.key]!! }
+		val houseNumAllServer = mutableListOf<String>()
+		plotListPerServer.forEach { pair ->
+			val perServer = mutableListOf<String>()
+			if (pair.value.any { it.Size == 0 }) perServer.add("S ${pair.value.count { it.Size == 0 }}")
+			if (pair.value.any { it.Size == 1 }) perServer.add("M ${pair.value.count { it.Size == 1 }}")
+			if (pair.value.any { it.Size == 2 }) perServer.add("L ${pair.value.count { it.Size == 2 }}")
+			houseNumAllServer.add(perServer.joinTo(StringBuilder(), "/", "${pair.key.take(2)}(", ")").toString())
+		}
+
+		outputBottom.addAll(houseNumAllServer.chunked(4) { it.joinTo(StringBuilder(), ", ").toString() })
+	}
+	//如果有请求失败
+	if (successCount.any { it != serverList.size }) {
 		val str = StringBuilder()
 		str.append("请求成功：")
 		HouseDataList.forEachIndexed { index, voteInfoOperate ->
 			if (index != 0) str.append(", ")
-			str.append(String.format("%s[%,d/%,d]", voteInfoOperate.sourceName, successCount[index], searchList.size))
+			str.append(String.format("%s[%,d/%,d]", voteInfoOperate.sourceName, successCount[index], serverList.size))
 		}
 		outputBottom.add(str.toString())
 	}
@@ -606,12 +718,13 @@ public object WannaCommand : SimpleCommand(
 		output.add("（网站提供ngld悬浮窗上传方式，无需配置额外插件）")
 		output.add("Jim：https://house.ffxiv.cyou/")
 		output.add("（网站提供ACT插件上传方式，支持记录人数）")
+		output.add("最小/最大/平均耗时[失败次数/请求量]：")
 		output.add(
-			"平均延迟[失败次数/请求量]：" + String.format(
-				"%.3fs[%,d/%,d]，%.3fs[%,d/%,d]，%.3fs[%,d/%,d]",
-				VoteInfoCha.Companion.Logger.TimeMillis.toDouble() / VoteInfoCha.Companion.Logger.CallTimes / 1000, VoteInfoCha.Companion.Logger.FailTimes, VoteInfoCha.Companion.Logger.CallTimes,
-				HouseInfo.Companion.Logger.TimeMillis.toDouble() / HouseInfo.Companion.Logger.CallTimes / 1000, HouseInfo.Companion.Logger.FailTimes, HouseInfo.Companion.Logger.CallTimes,
-				VoteInfoHouseHelper.Companion.Logger.TimeMillis.toDouble() / VoteInfoHouseHelper.Companion.Logger.CallTimes / 1000, VoteInfoHouseHelper.Companion.Logger.FailTimes, VoteInfoHouseHelper.Companion.Logger.CallTimes,
+			String.format(
+				"%.3f/%.3f/%.3fs[%,d/%,d]，%.3f/%.3f/%.3fs[%,d/%,d]，%.3f/%.3f/%.3fs[%,d/%,d]",
+				VoteInfoCha.Logger.MinMillis.toDouble() / 1000, VoteInfoCha.Logger.MaxMillis.toDouble() / 1000, VoteInfoCha.Logger.TimeMillis.toDouble() / VoteInfoCha.Logger.CallTimes / 1000, VoteInfoCha.Logger.FailTimes, VoteInfoCha.Logger.CallTimes,
+				HouseInfo.Logger.MinMillis.toDouble() / 1000, HouseInfo.Logger.MaxMillis.toDouble() / 1000, HouseInfo.Logger.TimeMillis.toDouble() / HouseInfo.Logger.CallTimes / 1000, HouseInfo.Logger.FailTimes, HouseInfo.Logger.CallTimes,
+				VoteInfoHouseHelper.Logger.MinMillis.toDouble() / 1000, VoteInfoHouseHelper.Logger.MaxMillis.toDouble() / 1000, VoteInfoHouseHelper.Logger.TimeMillis.toDouble() / VoteInfoHouseHelper.Logger.CallTimes / 1000, VoteInfoHouseHelper.Logger.FailTimes, VoteInfoHouseHelper.Logger.CallTimes,
 			)
 		)
 		output.add("")
@@ -619,11 +732,6 @@ public object WannaCommand : SimpleCommand(
 		output.add("By status102/依琳娜")
 
 		val outputTextLine = output.map { TextLine.make(it, font) }
-		val qrEncoder = Image.makeFromEncoded(
-			QRCode("https://home.ff14.cn/").render(
-				10, darkColor = Colors.rgba(0, 0, 0, 80), brightColor = Colors.rgba(255, 255, 255, 0)
-			).getBytes()
-		)
 
 		val surface = Surface.makeRasterN32Premul((Merge_Left + (outputTextLine.maxOfOrNull { it.width } ?: 0F) + Merge_Right).toInt(), (Merge_Up + outputTextLine.sumOf { ceil(it.height).toInt() } + Merge_Down).toInt())
 		surface.canvas.run {
@@ -728,11 +836,6 @@ public object WannaCommand : SimpleCommand(
 			commandContext.sender.sendMessage(commandContext.originalMessage.quote() + "<${serverList.joinTo(java.lang.StringBuilder())}>服务器/大区不存在")
 			return
 		}
-		//var serverName = str
-		//if (subNameMap.containsKey(serverName)) serverName = subNameMap[serverName].toString()
-		//val realName = serverName
-		//if (serverIdMap.containsKey(serverName)) serverName = serverIdMap[serverName].toString()
-		//val realName = "${serverList.size}个服"
 		val search = serverList.fold(mutableListOf<Int>()) { sum, element -> (sum + serverOrDcNickNameToServerName(element).map { serverIdMap[it] ?: 0 }.filter { it > 0 }).toMutableList() }.toSet().toList()
 		val realName = if (serverList.size == 1) serverList[0] else "${search.size}个服"
 
@@ -768,22 +871,9 @@ public object WannaCommand : SimpleCommand(
 					}
 				}
 		} catch (e: Exception) {
-			WannaHomeKt.logger.error { "发送房屋数据失败：$e\n${e.stackTraceToString()}" }
+			WannaHomeKt.logger.error { "发送房屋数据失败：${e.stackTraceToString()}" }
+			commandContext.sender.sendMessage(commandContext.originalMessage.quote() + "发送房屋数据失败：$e")
 		}
-		/*
-		val output = getServerData(commandContext.sender.getGroupOrNull()?.id, search, realName, size.uppercase(Locale.getDefault())) { i, _ -> i >= 30 }.trimEnd('\n')
-		try {
-			if (commandContext.sender.isNotConsole())
-				commandContext.sender.sendMessage(commandContext.originalMessage.quote() + output)
-			else
-				commandContext.sender.sendMessage(output)
-		} catch (e: MessageTooLargeException) {
-			val list = output.split("\n")
-			for (i in list.indices step 8) {
-				commandContext.sender.sendMessage(commandContext.originalMessage.quote() + "(${i / 8 + 1}/${ceil(list.size / 8.0).toInt()})" + list.slice(i until minOf(i + 8, list.size)).reduce { acc, s -> "$acc\n$s" })
-				delay(500)
-			}
-		}*/
 		synchronized(groupListLock) {
 			if (commandContext.sender.getGroupOrNull() != null)
 				Data.WannaHomeGroupList.add("${commandContext.sender.bot?.id}-${commandContext.sender.getGroupOrNull()?.id}")
@@ -823,16 +913,15 @@ public object WannaCommand : SimpleCommand(
 		val channel = Channel<Triple<VoteInfoOperate, Boolean, Map<String, PlotInfo>>>(Channel.UNLIMITED)
 
 		GlobalScope.launch {
-			val list = mutableListOf<Job>()
 			serverIdList.forEach { serverId ->
 				HouseDataList.forEach {
-					try {
-						list.add(launch {
+					launch {
+						try {
 							channel.send(Triple(it, true, it.run(serverId, lastTurnStart, thisTurnStart)))
-						})
-					} catch (e: Exception) {
-						WannaHomeKt.logger.error { "${it.sourceName}获取网络数据出错：$e\n${e.stackTraceToString()}" }
-						channel.send(Triple(it, false, mapOf()))
+						} catch (e: Exception) {
+							WannaHomeKt.logger.error { "${it.sourceName}获取网络数据出错：${e.stackTraceToString()}" }
+							channel.send(Triple(it, false, mapOf()))
+						}
 					}
 				}
 			}
@@ -914,8 +1003,8 @@ public object WannaCommand : SimpleCommand(
 						fcList = fcList.filter { limitStr.contains(territoryMap[it.TerritoryId] ?: "") }
 					}
 				}
-				personList = personList.run { sortedBy { it.WardId * 60 + it.HouseId }.sortedBy { it.TerritoryId }.sortedByDescending { it.Size }.sortedByDescending { it.VoteCount } }
-				fcList = fcList.run { sortedBy { it.WardId * 60 + it.HouseId }.sortedBy { it.TerritoryId }.sortedByDescending { it.Size }.sortedByDescending { it.VoteCount } }
+				personList = personList.run { asSequence().sortedBy { it.WardId * 60 + it.HouseId }.sortedBy { it.TerritoryId }.sortedByDescending { it.ServerId }.sortedByDescending { it.Size }.sortedByDescending { it.VoteCount }.toList() }
+				fcList = fcList.run { asSequence().sortedBy { it.WardId * 60 + it.HouseId }.sortedBy { it.TerritoryId }.sortedByDescending { it.ServerId }.sortedByDescending { it.Size }.sortedByDescending { it.VoteCount }.toList() }
 
 				var personShow = min(Limit_Person.first, personList.size)
 				var fcShow = min(Limit_FC.first, fcList.size)
@@ -957,7 +1046,7 @@ public object WannaCommand : SimpleCommand(
 				if (output.contains(outdatedWarnChar))
 					output.appendLine(outdatedWarnChar + outdatedTime + outdatedWarnTips)
 				if (personList.size + fcList.size > Limit_Person.first + Limit_FC.first) {
-					if (showTipsGroup.contains(groupId))
+					if (houseTipsGroup.contains(groupId))
 						output.appendLine("更多空地请查阅群公告中网站")
 					else
 						output.appendLine("更多空地使用“/空地”查看数据源")
@@ -1055,103 +1144,51 @@ public object MapCommand : SimpleCommand(
 	}
 }
 
-public fun unixTimeToStr(num: Long, isMillis: Boolean = false): String {
+fun unixTimeToStr(num: Long, isMillis: Boolean = false): String {
 	return SimpleDateFormat("YYYY-MM-dd HH:mm:ss").format(if (isMillis) num else (num * 1000))
 }
 
-public fun unixMillisTimeToStr(num: Long): String {
+fun unixMillisTimeToStr(num: Long): String {
 	return SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(num)
 }
 
-public fun strTimeToDate(str: String): Date {
+fun strTimeToDate(str: String): Date {
 	return SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(str)
 }
 
-@OptIn(DelicateCoroutinesApi::class)
-public fun initSendNote() {
+fun initListenOwner(bot: Bot) {
 	GlobalScope.launch {
 		while (true) {
-			val now = Calendar.getInstance().timeInMillis
-			val start = Calendar.getInstance().apply { time = strTimeToDate("2022-08-08 23:00:00") }
-
-			val diff = floor((Calendar.getInstance().timeInMillis - start.timeInMillis) / 1000 / 60.0 / 60 / 24).toInt()
-			val turn = diff / 9 + 1
-			val canEntry = (diff % 9) < 5
-			val nextEventTime = (start.clone() as Calendar).apply {
-				if (canEntry)
-					add(Calendar.DAY_OF_MONTH, ((turn - 1) * 9 + 5))
-				else
-					add(Calendar.DAY_OF_MONTH, turn * 9)
-			}
-			delay(nextEventTime.timeInMillis - now + 5)
-			WannaHomeKt.logger.info { "执行例行公告，下次执行：${unixMillisTimeToStr(nextEventTime.timeInMillis)}" }
-			try {
-				sendNoteMessage()
-			} catch (e: Exception) {
-				WannaHomeKt.logger.info { "执行例行提醒出错：\n${e.stackTraceToString()}" }
-			}
-		}
-	}
-}
-
-public suspend fun sendNoteMessage() {
-	if (Data.WannaHomeGroupList.isEmpty()) return
-	val now = Calendar.getInstance().timeInMillis / 1000
-	val start = Calendar.getInstance().apply { time = strTimeToDate("2022-08-08 23:00:00") }
-
-	val diff = floor((now - start.timeInMillis / 1000) / 60.0 / 60 / 24).toInt()
-	val turn = diff / 9 + 1
-	val canEntry = (diff % 9) < 5
-	val output = StringBuilder()
-	val lastTurnStart = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, (turn - 2) * 9) }
-	val thisTurnStart = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, (turn - 1) * 9) }
-	val thisTurnShow = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, (turn - 1) * 9 + 5) }
-	val nextTurnStart = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, (turn) * 9) }
-	val nextEventTime = (start.clone() as Calendar).apply {
-		if (canEntry)
-			add(Calendar.DAY_OF_MONTH, ((turn - 1) * 9 + 5))
-		else
-			add(Calendar.DAY_OF_MONTH, turn * 9)
-	}
-	val nextEventTimeStr = String.format("%d号%02d点", nextEventTime.get(Calendar.DAY_OF_MONTH), nextEventTime.get(Calendar.HOUR_OF_DAY))
-
-	output.appendLine("第${turn}轮${if (canEntry) "摇号" else "公示"}已开始")
-	if (!canEntry)
-		output.appendLine(String.format("下轮参与时间：%s点~%s点", unixTimeToStr(nextTurnStart.timeInMillis, true).substring(5, 13), unixTimeToStr((nextTurnStart.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 5) }.timeInMillis, true).substring(5, 13)))
-	else
-		output.appendLine(String.format("参与时间：%s点~%s点", unixTimeToStr(thisTurnStart.timeInMillis, true).substring(5, 13), unixTimeToStr(thisTurnShow.timeInMillis, true).substring(5, 13)))
-
-	val noteList = mutableMapOf<Long, MutableSet<Long>>()
-	synchronized(groupListLock) {
-		Data.WannaHomeGroupList.map { it.split('-') }.forEach {
-			if (it.size == 2) {
-				if (noteList.containsKey(it[0].toLong()))
-					noteList[it[0].toLong()]?.add(it[1].toLong())
-				else
-					noteList[it[0].toLong()] = mutableSetOf(it[1].toLong())
-			}
-		}
-		Data.WannaHomeGroupList.clear()
-	}
-
-	runBlocking {
-		Bot.instances.forEach { bot ->
-			if (bot.isOnline && noteList.containsKey(bot.id)) {
-				noteList[bot.id]?.forEach {
-					launch {
-						bot.getGroup(it)?.run {
-							delay(Random(Calendar.getInstance().timeInMillis).nextLong(200, 5000))
-							changeBotGroupNameCard(this, canEntry, nextEventTimeStr)
-							sendMessage(output.toString().trimEnd('\n'))
-						}
+			val now = Calendar.getInstance()
+			val diff = (now.timeInMillis - lastListened) / 1000 / 60 // / 60
+			WannaHomeKt.logger.info { "进行监听时长检查，上次监听时间：${unixMillisTimeToStr(lastListened)}(${diff})" }
+			if (diff >= lostMinute) {
+				if (warningState == 1) {
+					lostFriend.forEach {
+						bot.getFriend(it)?.sendMessage(lostTips.replace("%time", String.format("%dday %d:%02d", diff / 60 / 24, diff / 60, diff % 60)))
+					}
+					lostGroup.forEach {
+						bot.getGroup(it)?.sendMessage(lostTips.replace("%time", String.format("%dday %d:%02d", diff / 60 / 24, diff / 60, diff % 60)))
 					}
 				}
+				warningState = 2
+			} else if (diff >= warningMinute) {
+				warningState = 1
+				warningFriend.forEach {
+					bot.getFriend(it)?.sendMessage(warningTips.replace("%time", String.format("%dday %d:%02d", diff / 60 / 24, diff / 60, diff % 60)))
+				}
+				warningGroup.forEach {
+					bot.getGroup(it)?.sendMessage(warningTips.replace("%time", String.format("%dday %d:%02d", diff / 60 / 24, diff / 60, diff % 60)))
+				}
+			} else {
+				warningState = 0
 			}
+			delay(1000L * (warnIntervalMinute * 60 - (now.get(Calendar.MINUTE) % warnIntervalMinute) * 60 - now.get(Calendar.SECOND) + 5))
 		}
 	}
 }
 
-public fun changeBotGroupNameCard(group: Group, canEntry: Boolean, nextEventTimeStr: String) {
+fun changeBotGroupNameCard(group: Group, canEntry: Boolean, nextEventTimeStr: String) {
 	group.botAsMember.apply {
 		nameCard = nameCard.replace(Regex("【.+?(】|$)"), "").let { nameCard ->
 			if (nameCard.isEmpty() || nameCard.isBlank())
@@ -1160,6 +1197,17 @@ public fun changeBotGroupNameCard(group: Group, canEntry: Boolean, nextEventTime
 				nameCard
 		} + "【${if (!canEntry) "下轮抽奖" else "本轮公示"}${nextEventTimeStr}】"
 	}
+}
+
+fun diffTimeToStr(diff: Long, showMillis: Boolean = true, showDays: Boolean = false):String{
+	val diffSec = diff / 1000
+	val left = if(showDays)
+		String.format("%,d日 %d:%02d:%02d", diffSec / 24 / 3600,(diffSec / 3600) % 24, (diffSec / 60) % 60, diffSec % 60)
+	else
+		 String.format("%,d:%02d:%02d", diffSec / 3600, (diffSec / 60) % 60, diffSec % 60)
+	if(showMillis)
+		return String.format("${left}.%03d", diff % 1000)
+	return left
 }
 
 public fun strTimeToUnix(str: String): Long {
@@ -1211,7 +1259,7 @@ public val Map_Url: Map<String, String> = mapOf(
 /**
  * name to ID
  */
-public val serverIdMap: Map<String, Int> = mapOf(
+val serverIdMap: Map<String, Int> = mapOf(
 	"拉诺西亚" to 1042,
 	"幻影群岛" to 1044,
 	"萌芽池" to 1060,
@@ -1241,16 +1289,16 @@ public val serverIdMap: Map<String, Int> = mapOf(
 	"伊修加德" to 1186,
 	"红茶川" to 1201
 )
-public val serverNameMap: Map<Int, String> by lazy {
+val serverNameMap: Map<Int, String> by lazy {
 	serverIdMap.mapValues { it.key }.mapKeys { serverIdMap[it.key]!! }
 }
-public val serverMap: Map<String, List<String>> = mapOf(
+val serverMap: Map<String, List<String>> = mapOf(
 	"陆行鸟" to listOf("鸟"), "莫古力" to listOf("猪"), "猫小胖" to listOf("猫"), "豆豆柴" to listOf("狗"),
 	"鸟" to listOf("拉诺西亚", "幻影群岛", "神意之地", "萌芽池", "红玉海", "宇宙和音", "沃仙曦染", "晨曦王座"),
 	"猪" to listOf("潮风亭", "神拳痕", "白银乡", "白金幻象", "旅人栈桥", "拂晓之间", "龙巢神殿", "梦羽宝境"),
 	"猫" to listOf("紫水栈桥", "延夏", "静语庄园", "摩杜纳", "海猫茶屋", "柔风海湾", "琥珀原"),
 	"狗" to listOf("水晶塔", "银泪湖", "太阳海岸", "伊修加德", "红茶川")
 )
-public val territoryMap: Map<Int, String> = mapOf(339 to "海", 340 to "森", 341 to "沙", 641 to "白", 979 to "雪")
-public val sizeMap: List<String> = listOf("S", "M", "L")
+val territoryMap: Map<Int, String> = mapOf(339 to "海", 340 to "森", 341 to "沙", 641 to "白", 979 to "雪")
+val sizeMap: List<String> = listOf("S", "M", "L")
 //endregion

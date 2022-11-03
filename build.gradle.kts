@@ -1,5 +1,5 @@
 group = "cn.status102"
-version = "0.1.1"
+version = "0.1.2"
 
 plugins {
 	val kotlinVersion = "1.7.10"
@@ -8,12 +8,7 @@ plugins {
 	kotlin("plugin.serialization") version kotlinVersion
 	//id("org.jetbrains.compose") version "1.1.0"
 	//kotlin("multiplatform") version "1.4.20"
-	//kotlin("multiplatform") version "1.7.10"
-	//kotlin("multiplatform") version "1.6.21"
 	//id("org.jetbrains.compose") version "1.3.0"
-	//id("org.jetbrains.compose") version "1.2.0-alpha01-dev709"
-	//id("org.jetbrains.compose") version "1.2.1-dev-k1.7.10-27cf0868d10"
-	//id("org.jetbrains.compose") version "1.2.0-beta01"
 	id("net.mamoe.mirai-console") version "2.12.0"
 	//id("com.github.johnrengelman.shadow") version "7.1.2"
 	//id("org.jetbrains.compose") version "1.2.0-alpha01-dev741"
@@ -40,8 +35,8 @@ val skikoVersion = "0.7.32"
 val target = "${targetOs}-${targetArch}"
 
 dependencies {
-	implementation("io.github.g0dkar:qrcode-kotlin-jvm:3.2.0")
 	implementation("org.jetbrains.skiko:skiko-awt-runtime-$target:$skikoVersion")
+	//implementation("io.github.g0dkar:qrcode-kotlin-jvm:3.2.0")
 	//shadowLink("org.jetbrains.skiko:skiko-awt-runtime-windows-x64")
 }
 
