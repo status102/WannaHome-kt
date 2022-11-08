@@ -1,6 +1,6 @@
 package cn.status102.data
 
-interface VoteInfoOperate {
+interface IVoteInfoOperate {
 	val sourceName : String
 
 	/**

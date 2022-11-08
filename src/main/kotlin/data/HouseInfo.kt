@@ -24,6 +24,7 @@ import okhttp3.Call
 import okhttp3.Request
 import okhttp3.Response
 import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.*
 import java.util.concurrent.TimeUnit
 
@@ -35,7 +36,7 @@ object BingyinLogger : AutoSavePluginData("Wanahome_Bingyin_Log") {
 	var MinMillis by value(Long.MAX_VALUE)
 }
 
-class HouseInfo : VoteInfoOperate {
+class HouseInfo : IVoteInfoOperate {
 
 	companion object {
 		init {
@@ -60,24 +61,20 @@ class HouseInfo : VoteInfoOperate {
 		}
 
 		suspend fun call(serverId: Int, reCallTimes: Int = 0, reCallTimesLimit: Int = 3): Response {
-			try {
-				return newCall(serverId).execute().apply {
+			return try {
+				newCall(serverId).execute().apply {
 					if (networkResponse != null)
 						CallTimes++
 				}
-			} catch (e: SocketTimeoutException) {
-				if (reCallTimes < reCallTimesLimit) {
-					CallTimes++
-					FailTimes++
-					delay(1500)
-					WannaHomeKt.logger.warning { "冰音尝试第${reCallTimes + 1}次获取[${serverNameMap[serverId]}]超时：$e" }
-					return call(serverId, reCallTimes + 1)
-				} else
-					throw e
 			} catch (e: Exception) {
 				CallTimes++
 				FailTimes++
-				throw e
+				if((e is SocketTimeoutException || e is UnknownHostException) && reCallTimes < reCallTimesLimit){
+					delay(1500)
+					WannaHomeKt.logger.warning { "冰音尝试第${reCallTimes + 1}次获取[${serverNameMap[serverId]}]失败：$e" }
+					call(serverId, reCallTimes + 1)
+				}else
+					throw e
 			}
 		}
 	}
@@ -88,7 +85,7 @@ class HouseInfo : VoteInfoOperate {
 	override val sourceName: String = "冰音"
 
 	override suspend fun run(serverId: Int, lastTurnStart: Long, thisTurnStart: Long): Map<String, PlotInfo> {
-		//WannaHomeKt.logger.info { "开始获取冰音[${serverNameMap[serverId]}]" }
+		//WannaHomeKt.logger.info { "开始获取${sourceName}[${serverNameMap[serverId]}]" }
 		val voteInfoMap = mutableMapOf<String, PlotInfo>()
 		val startTimeStamp = Calendar.getInstance().timeInMillis
 

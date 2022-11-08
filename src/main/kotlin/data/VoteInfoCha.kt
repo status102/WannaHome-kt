@@ -20,6 +20,7 @@ import net.mamoe.mirai.utils.warning
 import okhttp3.Call
 import okhttp3.Request
 import okhttp3.Response
+import java.io.IOException
 import java.net.SocketTimeoutException
 import java.util.*
 
@@ -31,7 +32,7 @@ object CettiidaeLogger : AutoSavePluginData("VoteInfo_Cettiidae_Log") {
 	var MinMillis by value(Long.MAX_VALUE)
 }
 
-class VoteInfoCha : VoteInfoOperate {
+class VoteInfoCha : IVoteInfoOperate {
 	companion object {
 		init {
 			Logger.reload()
@@ -61,19 +62,15 @@ class VoteInfoCha : VoteInfoOperate {
 					if (this.networkResponse != null)
 						CallTimes++
 				}
-			} catch (e: SocketTimeoutException) {
-				if (reCallTimes < reCallTimesLimit) {
-					CallTimes++
-					FailTimes++
-					WannaHomeKt.logger.warning { "猹尝试第${reCallTimes + 1}次获取[${serverNameMap[serverId]}]超时：$e" }
-					delay(1500)
-					return call(serverId, reCallTimes + 1)
-				}
-				throw e
 			} catch (e: Exception) {
 				CallTimes++
 				FailTimes++
-				throw e
+				if((e is SocketTimeoutException || e is IOException) && reCallTimes < reCallTimesLimit){
+					delay(1500)
+					WannaHomeKt.logger.warning { "猹尝试第${reCallTimes + 1}次获取[${serverNameMap[serverId]}]失败：$e" }
+					return call(serverId, reCallTimes + 1)
+				}else
+					throw e
 			}
 		}
 	}

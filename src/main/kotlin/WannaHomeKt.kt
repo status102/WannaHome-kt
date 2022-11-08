@@ -107,7 +107,7 @@ public val cacheDir = File("${WannaHomeKt.dataFolderPath}${File.separatorChar}ok
 public val imageDir = File("${WannaHomeKt.dataFolderPath}${File.separatorChar}map")
 public val client = OkHttpClient.Builder()
 	.cache(Cache(cacheDir, 100 * 1024 * 1024))
-	.connectTimeout(8, TimeUnit.SECONDS).build()
+	.connectTimeout(10, TimeUnit.SECONDS).build()
 
 //endregion
 var font: Font? = null
@@ -444,7 +444,7 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 	val personTextList = personList.map(trans(now, outdatedLimit, showServerName)).take(personShow)
 	val fcTextList = fcList.map(trans(now, outdatedLimit, showServerName)).take(fcShow)
 
-	val title = (String.format("[第%s轮%s日%s]<%s>%s：", turn, diff % 9 + 1, if (canEntry) "参与" else "公示", serverName, limitStr.uppercase(Locale.getDefault())))
+	val title = (String.format("[第%s轮第%s天-%s中]<%s>%s：", turn, diff % 9 + 1, if (canEntry) "参与" else "公示", serverName, limitStr.uppercase(Locale.getDefault())))
 	val outputTitle = mutableListOf<String>()
 	if (personList.isEmpty() && fcTextList.isEmpty()) {
 		outputTitle.add(title)
@@ -519,7 +519,7 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 	//如果有请求失败
 	if (successCount.any { it != serverList.size }) {
 		val str = StringBuilder()
-		str.append("请求成功：")
+		str.appendLine("数据源连接状态：")
 		HouseDataList.forEachIndexed { index, voteInfoOperate ->
 			if (index != 0) str.append(", ")
 			str.append(String.format("%s[%,d/%,d]", voteInfoOperate.sourceName, successCount[index], serverList.size))
@@ -922,8 +922,8 @@ public object WannaCommand : SimpleCommand(
 	}
 
 	@OptIn(DelicateCoroutinesApi::class)
-	suspend fun getHouseData(serverIdList: List<Int>, lastTurnStart: Long, thisTurnStart: Long): Channel<Triple<VoteInfoOperate, Boolean, Map<String, PlotInfo>>> {
-		val channel = Channel<Triple<VoteInfoOperate, Boolean, Map<String, PlotInfo>>>(Channel.UNLIMITED)
+	suspend fun getHouseData(serverIdList: List<Int>, lastTurnStart: Long, thisTurnStart: Long): Channel<Triple<IVoteInfoOperate, Boolean, Map<String, PlotInfo>>> {
+		val channel = Channel<Triple<IVoteInfoOperate, Boolean, Map<String, PlotInfo>>>(Channel.UNLIMITED)
 
 		GlobalScope.launch {
 			serverIdList.forEach { serverId ->
@@ -964,7 +964,7 @@ public object WannaCommand : SimpleCommand(
 
 			val plotInfoMap = mutableMapOf<String, PlotInfo>()
 			val output = java.lang.StringBuilder()
-			output.appendLine(String.format("[第%s轮%s日%s]<%s>%s：", turn, diff % 9 + 1, if (canEntry) "参与" else "公示", serverName, limitStr.uppercase(Locale.getDefault())))
+			output.appendLine(String.format("[第%s轮第%s天-%s中]<%s>%s：", turn, diff % 9 + 1, if (canEntry) "参与" else "公示", serverName, limitStr.uppercase(Locale.getDefault())))
 
 			val channel = getHouseData(searchList, lastTurnStart, thisTurnStart)
 			repeat(HouseDataList.size * searchList.size) {

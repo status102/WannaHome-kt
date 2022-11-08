@@ -22,6 +22,7 @@ import okhttp3.Call
 import okhttp3.Request
 import okhttp3.Response
 import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.*
 import java.util.concurrent.TimeUnit
 
@@ -33,7 +34,7 @@ object HouseHelpeLogger : AutoSavePluginData("VoteInfo_HouseHelper_Log") {
 	var MinMillis by value(Long.MAX_VALUE)
 }
 
-class VoteInfoHouseHelper : VoteInfoOperate {
+class VoteInfoHouseHelper : IVoteInfoOperate {
 
 	companion object {
 		init {
@@ -62,19 +63,15 @@ class VoteInfoHouseHelper : VoteInfoOperate {
 					if (this.networkResponse != null)
 						CallTimes++
 				}
-			} catch (e: SocketTimeoutException) {
-				if (reCallTimes < reCallTimesLimit) {
-					CallTimes++
-					FailTimes++
-					WannaHomeKt.logger.warning { "HouseHelper尝试第${reCallTimes + 1}次获取[${serverNameMap[serverId]}]超时：$e" }
-					delay(1500)
-					return call(serverId, reCallTimes + 1)
-				}
-				throw e
-			} catch (e: Exception) {
+			}  catch (e: Exception) {
 				CallTimes++
 				FailTimes++
-				throw e
+				if((e is SocketTimeoutException || e is UnknownHostException) && reCallTimes < reCallTimesLimit){
+					delay(1500)
+					WannaHomeKt.logger.warning { "Jim尝试第${reCallTimes + 1}次获取[${serverNameMap[serverId]}]失败：$e" }
+					return call(serverId, reCallTimes + 1)
+				}else
+					throw e
 			}
 		}
 	}
