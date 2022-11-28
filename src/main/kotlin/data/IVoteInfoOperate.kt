@@ -1,6 +1,9 @@
 package cn.status102.data
 
 interface IVoteInfoOperate {
+	/**
+	 * 数据来源站名称
+	 */
 	val sourceName : String
 
 	/**

@@ -105,7 +105,7 @@ class HouseInfo : IVoteInfoOperate {
 					val saleList = jsonDecoder.decodeFromString<ServerData>(str)
 					val lastShow = lastTurnStart + 5 * 24 * 3600
 					//WannaHomeKt.logger.info  { "冰音：${saleList.OnSale.size}，${saleList.LastUpdate}-${thisTurnStart}" }
-					if (saleList.LastUpdate >= thisTurnStart)
+					if (saleList.LastUpdate >= (Calendar.getInstance().timeInMillis) / 1000 - 5 * 24 * 3600)
 						saleList.OnSale
 							//.filter { it.StartSell >= lastShow }
 							.forEach {

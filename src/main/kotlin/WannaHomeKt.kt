@@ -9,8 +9,6 @@ import net.mamoe.mirai.console.command.*
 import net.mamoe.mirai.console.command.CommandManager.INSTANCE.register
 import net.mamoe.mirai.console.command.CommandManager.INSTANCE.unregister
 import net.mamoe.mirai.console.command.CommandSender.Companion.toCommandSender
-import net.mamoe.mirai.console.data.AutoSavePluginConfig
-import net.mamoe.mirai.console.data.AutoSavePluginData
 import net.mamoe.mirai.console.data.value
 import net.mamoe.mirai.console.plugin.jvm.JvmPluginDescription
 import net.mamoe.mirai.console.plugin.jvm.KotlinPlugin
@@ -107,7 +105,9 @@ public val cacheDir = File("${WannaHomeKt.dataFolderPath}${File.separatorChar}ok
 public val imageDir = File("${WannaHomeKt.dataFolderPath}${File.separatorChar}map")
 public val client = OkHttpClient.Builder()
 	.cache(Cache(cacheDir, 100 * 1024 * 1024))
-	.connectTimeout(10, TimeUnit.SECONDS).build()
+	.connectTimeout(10, TimeUnit.SECONDS)
+	//.eventListener(EventListener().cacheConditionalHit())
+	.build()
 
 //endregion
 var font: Font? = null
@@ -168,13 +168,10 @@ public object WannaHomeKt : KotlinPlugin(
 				it.getFriend(3122262428)?.sendMessage("${operator.nameCardOrNick}[${operator.id}]在${group.name}[${group.id}]取消禁言了bot")
 			}*/
 		}
-		eventChannel.subscribeAlways<GroupMessageEvent> {
-			//BOT被取消禁言
-			this.message.forEach {
-				if (it is PlainText) {
+		eventChannel.subscribeAlways<MessageEvent>{
+			this.message.contentsList().forEach {
+				if(it is PlainText) {
 					if (it.content == "/空地") {
-						this.message.metadataList()
-						it.toMessageChain().quote()
 						WannaCommand.handle(Cont(this.message, toCommandSender()))
 					} else if (it.content == "/空地 简称") {
 						WannaCommand.sendServerNickName(Cont(this.message, toCommandSender()))
@@ -184,6 +181,21 @@ public object WannaHomeKt : KotlinPlugin(
 				}
 			}
 		}
+/*
+		eventChannel.subscribeAlways<GroupMessageEvent> {
+			this.message.contentsList().forEach {
+				if(it is PlainText) {
+					if (it.content == "/空地") {
+						WannaCommand.handle(Cont(this.message, toCommandSender()))
+					} else if (it.content == "/空地 简称") {
+						WannaCommand.sendServerNickName(Cont(this.message, toCommandSender()))
+					} else if (it.content.startsWith("/空地 ")) {
+						getEmptyPlace(Cont(this.message, toCommandSender()), it.content.substring(4))
+					}
+				}
+			}
+		}
+*/
 		eventChannel.subscribeAlways<BotOnlineEvent> {
 			if (this.bot.id == 3165860596) {
 				logger.info { "确认自用主机，已开始监听" }
@@ -251,7 +263,7 @@ suspend fun getEmptyPlace(commandContext: CommandContext, ss: String) {
 			val filter = serverIdMap.keys.filter { it.contains(str) }
 			if (ss.length >= 2 && filter.size == 1) {
 				if (commandContext.sender.isNotConsole())
-					commandContext.sender.sendMessage(commandContext.originalMessage.quote() + "未知服务器，推测为<${filter[0]}>，正在获取数据中，请耐心等待\"")
+					commandContext.sender.sendMessage(commandContext.originalMessage.quote() + "未知服务器，推测为<${filter[0]}>，正在获取数据中，请耐心等待")
 				else
 					println("未知服务器，推测为<${filter[0]}>，正在获取数据中，请耐心等待")
 				serverList.add(filter[0])
@@ -373,10 +385,12 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 
 
 	plotList.forEach {
+		//将上一轮的[准备中、无人中奖]归入该轮出售
 		if ((it.SaleState == 3 || (it.SaleState == 2 && it.WinnerIndex == 0)) && it.Update < thisTurnStart) {
 			it.Update = thisTurnStart
 			it.SaleState = 0
 		}
+		//把无状态的房屋放在最后
 		if (it.SaleState == 0) {
 			it.VoteCount = -2
 			it.WinnerIndex = -2
@@ -387,6 +401,7 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 	}
 	plotList = plotList.filter { it.Update >= lastTurnStart && (it.SaleState == 0 || it.Update >= thisTurnStart) }.toMutableList()
 
+	//分离部队房和个人房
 	var personList = plotList.filter { it.WardId < fcIdStart }
 	var fcList = plotList.filter { it.WardId >= fcIdStart }
 
@@ -529,13 +544,7 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 	while (outputBottom.lastOrNull()?.isEmpty() == true)
 		outputBottom.removeLast()
 	val textBottom = outputBottom.map { if (it.startsWith(outdatedWarnChar)) Pair(TextLine.make(it, font), grey) else Pair(TextLine.make(it, font), black) }
-	/*
-	val textList = output.map {
-		if (it.startsWith(outdatedWarnChar))
-			Pair(TextLine.make(it.substring(1), font), grey)
-		else
-			Pair(TextLine.make(it, font), black)
-	}*/
+
 	val base = if (textPerson.isEmpty()) 0F else textPerson.maxOfOrNull { it.first.width }!! + Merge_Mid
 
 	val height = font.metrics.height * (outputTitle.size + maxOf(outputPerson.size, outputFc.size) + outputBottom.size) + Merge_Up + Merge_Down
@@ -555,9 +564,9 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 		for ((i, it) in textFc.withIndex()) {
 			drawTextLine(it.first, Merge_Left + base, outputTitle.size * font.metrics.height + i * font.metrics.height + 10 - font.metrics.ascent, it.second)
 		}
+
 		for ((i, it) in textBottom.withIndex()) {
 			drawTextLine(it.first, Merge_Left, (outputTitle.size + maxOf(textPerson.size, textFc.size) + i) * font.metrics.height + 10 - font.metrics.ascent, it.second)
-
 		}
 	}
 	if (groupId == 0L) {
@@ -875,9 +884,9 @@ public object WannaCommand : SimpleCommand(
 						data.bytes.inputStream().toExternalResource().use {
 							if (commandContext.sender.subject != null) {
 								val image = it.uploadAsImage(commandContext.sender.subject!!)
-								if (commandContext.sender.isNotConsole())
+								if (commandContext.sender.isNotConsole()) {
 									commandContext.sender.sendMessage(commandContext.originalMessage.quote() + image)
-								else
+								}else
 									commandContext.sender.sendMessage("控制台：" + image.toMessageChain().contentToString())
 							}
 						}
@@ -1233,30 +1242,11 @@ public fun strTimeToUnixMillis(str: String): Long {
 
 public val groupListLock = Any()
 
-public object Data : AutoSavePluginData("Data") {
-	public var WannaHomeGroupList by value(mutableSetOf<String>())
-}
 
-public object Config : AutoSavePluginConfig("Config") {
-	public var subNameMap: MutableMap<String, String> by value(
-		mutableMapOf(
-			"海猫" to "海猫茶屋",
-			"柔风" to "柔风海湾",
-			"紫水" to "紫水栈桥",
-			"静语" to "静语庄园",
-			"鲸鱼" to "静语庄园",
-			"琥珀" to "琥珀原",
-			"魔都" to "摩杜纳",
-			"摩杜" to "摩杜纳",
-			"塔" to "水晶塔",
-			"茶" to "红茶川",
-			"湖" to "银泪湖"
-		)
-	)
-}
+
 
 //region 房屋种类信息
-public val Map_Url: Map<String, String> = mapOf(
+val Map_Url: Map<String, String> = mapOf(
 	"沙" to "https://huiji-public.huijistatic.com/ff14/uploads/3/31/高脚孤丘房屋等级及尺寸示意图.jpg",
 	"沙扩" to "https://huiji-public.huijistatic.com/ff14/uploads/a/a0/高脚孤丘扩建区房屋等级及尺寸示意图.jpg",
 	"森" to "https://huiji-public.huijistatic.com/ff14/uploads/0/03/薰衣草苗圃房屋等级及尺寸示意图.jpg",

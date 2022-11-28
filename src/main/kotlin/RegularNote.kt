@@ -107,7 +107,7 @@ suspend fun sendNoteMessage() {
 				noteList[bot.id]?.forEach {
 					launch {
 						bot.getGroup(it)?.run {
-							delay(Random(Calendar.getInstance().timeInMillis).nextLong(200, 5000))
+							delay(Random(Calendar.getInstance().timeInMillis).nextLong(30_000, 120_000))
 							changeBotGroupNameCard(this, canEntry, nextEventTimeStr)
 							sendMessage(output.toString().trimEnd('\n'))
 						}
@@ -155,7 +155,7 @@ suspend fun sendTipMessage() {
 				noteList[bot.id]?.forEach {
 					launch {
 						bot.getGroup(it)?.run {
-							delay(Random(Calendar.getInstance().timeInMillis).nextLong(200, 5000))
+							delay(Random(Calendar.getInstance().timeInMillis).nextLong(30_000, 120_000))
 							changeBotGroupNameCard(this, canEntry, nextEventTimeStr)
 							sendMessage(output.toString().trimEnd('\n'))
 						}

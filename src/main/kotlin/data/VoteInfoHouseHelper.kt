@@ -47,8 +47,8 @@ class VoteInfoHouseHelper : IVoteInfoOperate {
 		private fun newRequest(serverId: Int): Request {
 			return Request.Builder().url(HomeUrl + serverId).get()
 				.cacheControl(CacheControl.Builder().maxAge(1, TimeUnit.MINUTES).build()).run {
-					if (LastModified.isNotEmpty())
-						this.addHeader("If-Modified-Since", LastModified)
+					//if (LastModified.isNotEmpty())
+						//this.addHeader("If-Modified-Since", LastModified)
 					this
 				}.build()
 		}
