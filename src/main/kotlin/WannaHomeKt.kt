@@ -1,10 +1,7 @@
 package cn.status102
 
 import cn.status102.Config.subNameMap
-import cn.status102.command.MapCommand
-import cn.status102.command.SubNameCommand
-import cn.status102.command.TerritoryCommand
-import cn.status102.command.TestCommand
+import cn.status102.command.*
 import cn.status102.data.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -31,7 +28,6 @@ import okhttp3.Cache
 import okhttp3.OkHttpClient
 import org.jetbrains.skia.*
 import java.io.File
-import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
 import kotlin.collections.component1
@@ -42,15 +38,7 @@ import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.roundToLong
 
-
-val Limit_Person = 20..40
-val Limit_FC = 20..40
-const val fcIdStart = 16//个人区1~16，对应ID 0~15
-const val Merge_Left = 10F
-const val Merge_Right = 15F
-const val Merge_Up = 10F
-const val Merge_Down = 10F
-const val Merge_Mid = 20F
+val groupListLock = Any()
 
 val HouseDataList = listOf(HouseInfo(), VoteInfoCha(), VoteInfoHouseHelper())
 
@@ -78,7 +66,7 @@ val client = OkHttpClient.Builder()
 var font: Font? = null
 
 object WannaHomeKt : KotlinPlugin(
-	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.1.5")
+	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.2.1")
 	{ author("status102") }
 ) {
 	override fun onEnable() {
@@ -103,35 +91,40 @@ object WannaHomeKt : KotlinPlugin(
 		val eventChannel = GlobalEventChannel.parentScope(this)
 
 		eventChannel.subscribeAlways<NewFriendRequestEvent> {
-			if (this.bot.id == 3165860596)
-				this.bot.getFriend(3122262428)?.sendMessage("${fromNick}[${fromId}]发来的好友申请：${message}")
-			else if (this.bot.id == 2546619872)
-				this.accept()
+			if (Config.acceptFriendRequest) {
+				accept()
+				delay(random().nextLong(5_000, 30_000))
+				bot.getFriend(Config.owner)?.sendMessage(String.format("%s 收到<%s[%d]>发来的好友申请，已同意好友申请。申请留言：%s", strTime(), fromNick, fromId, message))
+			} else
+				bot.getFriend(Config.owner)?.sendMessage(String.format("%s 收到<%s[%d]>发来的好友申请，申请留言：%s", strTime(), fromNick, fromId, message))
 		}
 		eventChannel.subscribeAlways<BotInvitedJoinGroupRequestEvent> {
-			if (this.bot.id == 3165860596)
-				this.bot.getFriend(3122262428)?.sendMessage("${invitorNick}[${invitorId}]邀请加入${this.groupName}[${this.groupId}]")
-			else if (this.bot.id == 2546619872)
-				this.accept()
+
+			if (Config.acceptGroupRequest) {
+				accept()
+				delay(random().nextLong(5_000, 30_000))
+				bot.getFriend(Config.owner)?.sendMessage(String.format("%s <%s[%d]>邀请加入<%s[%d]>，已同意加群邀请", strTime(), invitorNick, invitorId, groupName, groupId))
+			} else
+				bot.getFriend(Config.owner)?.sendMessage(String.format("%s <%s[%d]>邀请加入<%s[%d]>", strTime(), invitorNick, invitorId, groupName, groupId))
 		}
+		//处理BOT退群消息，包括被踢、解散、主动退出
 		eventChannel.subscribeAlways<BotLeaveEvent> {
 			if (this is BotLeaveEvent.Kick) {
-				if (this.bot.id == 3165860596)
-					//TODO 增加时间戳
-					this.bot.getFriend(3122262428)?.sendMessage(String.format("Bot被%s[${operator.id}]踢出了${group.name}[${group.id}]",operator.remarkOrNameCardOrNick))
+				bot.getFriend(Config.owner)?.sendMessage(String.format("%s Bot被<%s[%d]>踢出了<%s[%d]>", strTime(), operator.remarkOrNameCardOrNick, operator.id, group.name, group.id))
+			} else {
+				bot.getFriend(Config.owner)?.sendMessage(String.format("%s Bot退出了<%s[%d]>群", strTime(), group.name, group.id))
 			}
 		}
+		//处理BOT被禁言
 		eventChannel.subscribeAlways<BotMuteEvent> {
-			if (this.bot.id == 3165860596)
-				this.bot.getFriend(3122262428)?.sendMessage("${operator.remarkOrNameCardOrNick}[${operator.id}]在${group.name}[${group.id}]禁言了bot，时长：" + String.format("%d day %d:%02d:%02d", durationSeconds / 24 / 3600, (durationSeconds / 3600) % 24, (durationSeconds / 60) % 60, durationSeconds % 60))
-
+			val day = durationSeconds / 24 / 3600
+			bot.getFriend(Config.owner)?.sendMessage(String.format("%s <%s[%d]>在<%s[%d]>群禁言了bot，时长：%s%d:%02d:%02d" ,strTime(),operator.remarkOrNameCardOrNick, operator.id, group.name, group.id, if(day==0)"" else "$day day ", (durationSeconds / 3600) % 24, (durationSeconds / 60) % 60, durationSeconds % 60))
 		}
 		eventChannel.subscribeAlways<BotUnmuteEvent> {
-			if (this.bot.id == 3165860596)
-				this.bot.getFriend(3122262428)?.sendMessage("${operator.nameCardOrNick}[${operator.id}]在${group.name}[${group.id}]取消禁言了bot")
+			bot.getFriend(Config.owner)?.sendMessage(String.format("%s <%s[%d]>在<%s[%d]>群取消禁言了bot", strTime(), operator.nameCardOrNick, operator.id, group.name, group.id))
 		}
 		eventChannel.subscribeAlways<MessageEvent> {
-			this.message.contentsList().forEach {
+			message.contentsList().forEach {
 				if (it is PlainText) {
 					if (it.content == "/空地") {
 						WannaCommand.handle(Cont(this.message, toCommandSender()))
@@ -493,21 +486,7 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 }
 
 
-object ServerListCommand : CompositeCommand(
-	WannaHomeKt, "服务器列表"
-) {
-	@SubCommand("list")
-	suspend fun CommandSender.handle() { // 函数名随意, 但参数需要按顺序放置.
-		val str = StringBuilder()
-		for (pair in serverIdMap) {
-			str.appendLine("<${pair.key}, ${pair.value}>")
-		}
-		sendMessage(str.toString())
-	}
-}
-
-
-public object WannaCommand : SimpleCommand(
+object WannaCommand : SimpleCommand(
 	WannaHomeKt, "空房", description = "获取服务器空余地块"
 ) {
 	@Handler
@@ -924,18 +903,6 @@ public object WannaCommand : SimpleCommand(
 }
 
 
-fun unixTimeToStr(num: Long, isMillis: Boolean = false): String {
-	return SimpleDateFormat("YYYY-MM-dd HH:mm:ss").format(if (isMillis) num else (num * 1000))
-}
-
-fun unixMillisTimeToStr(num: Long): String {
-	return SimpleDateFormat("YYYY-MM-dd HH:mm:ss.SSS").format(num)
-}
-
-fun strTimeToDate(str: String): Date {
-	return SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(str)
-}
-
 /**
  * 修改BOT群名片中的提示文本【(下轮抽奖|本轮公示)】
  */
@@ -960,64 +927,3 @@ fun diffTimeToStr(diff: Long, showMillis: Boolean = true, showDays: Boolean = fa
 		return String.format("${left}.%03d", diff % 1000)
 	return left
 }
-
-fun strTimeToUnix(str: String): Long {
-	return strTimeToDate(str).time / 1000
-}
-
-fun strTimeToUnixMillis(str: String): Long {
-	return strTimeToDate(str).time
-}
-
-val groupListLock = Any()
-
-
-//region 房屋种类信息
-
-
-/**
- * name to ID
- */
-val serverIdMap: Map<String, Int> = mapOf(
-	"拉诺西亚" to 1042,
-	"幻影群岛" to 1044,
-	"萌芽池" to 1060,
-	"神意之地" to 1081,
-	"红玉海" to 1167,
-	"宇宙和音" to 1173,
-	"沃仙曦染" to 1174,
-	"晨曦王座" to 1175,
-	"白金幻象" to 1076,
-	"旅人栈桥" to 1113,
-	"拂晓之间" to 1121,
-	"龙巢神殿" to 1166,
-	"潮风亭" to 1170,
-	"神拳痕" to 1171,
-	"白银乡" to 1172,
-	"梦羽宝境" to 1176,
-	"紫水栈桥" to 1043,
-	"摩杜纳" to 1045,
-	"静语庄园" to 1106,
-	"延夏" to 1169,
-	"海猫茶屋" to 1177,
-	"柔风海湾" to 1178,
-	"琥珀原" to 1179,
-	"银泪湖" to 1183,
-	"水晶塔" to 1192,
-	"太阳海岸" to 1180,
-	"伊修加德" to 1186,
-	"红茶川" to 1201
-)
-val serverNameMap: Map<Int, String> by lazy {
-	serverIdMap.mapValues { it.key }.mapKeys { serverIdMap[it.key]!! }
-}
-val serverMap: Map<String, List<String>> = mapOf(
-	"陆行鸟" to listOf("鸟"), "莫古力" to listOf("猪"), "猫小胖" to listOf("猫"), "豆豆柴" to listOf("狗"),
-	"鸟" to listOf("拉诺西亚", "幻影群岛", "神意之地", "萌芽池", "红玉海", "宇宙和音", "沃仙曦染", "晨曦王座"),
-	"猪" to listOf("潮风亭", "神拳痕", "白银乡", "白金幻象", "旅人栈桥", "拂晓之间", "龙巢神殿", "梦羽宝境"),
-	"猫" to listOf("紫水栈桥", "延夏", "静语庄园", "摩杜纳", "海猫茶屋", "柔风海湾", "琥珀原"),
-	"狗" to listOf("水晶塔", "银泪湖", "太阳海岸", "伊修加德", "红茶川")
-)
-val territoryMap: Map<Int, String> = mapOf(339 to "海", 340 to "森", 341 to "沙", 641 to "白", 979 to "雪")
-val sizeMap: List<String> = listOf("S", "M", "L")
-//endregion
