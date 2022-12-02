@@ -12,10 +12,7 @@ import net.mamoe.mirai.console.command.CommandSender.Companion.toCommandSender
 import net.mamoe.mirai.console.data.value
 import net.mamoe.mirai.console.plugin.jvm.JvmPluginDescription
 import net.mamoe.mirai.console.plugin.jvm.KotlinPlugin
-import net.mamoe.mirai.contact.Group
-import net.mamoe.mirai.contact.MessageTooLargeException
-import net.mamoe.mirai.contact.nameCardOrNick
-import net.mamoe.mirai.contact.remarkOrNameCardOrNick
+import net.mamoe.mirai.contact.*
 import net.mamoe.mirai.event.GlobalEventChannel
 import net.mamoe.mirai.event.events.*
 import net.mamoe.mirai.message.data.*
@@ -66,7 +63,7 @@ val client = OkHttpClient.Builder()
 var font: Font? = null
 
 object WannaHomeKt : KotlinPlugin(
-	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.2.1")
+	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.2.4")
 	{ author("status102") }
 ) {
 	override fun onEnable() {
@@ -99,7 +96,6 @@ object WannaHomeKt : KotlinPlugin(
 				bot.getFriend(Config.owner)?.sendMessage(String.format("%s 收到<%s[%d]>发来的好友申请，申请留言：%s", strTime(), fromNick, fromId, message))
 		}
 		eventChannel.subscribeAlways<BotInvitedJoinGroupRequestEvent> {
-
 			if (Config.acceptGroupRequest) {
 				accept()
 				delay(random().nextLong(5_000, 30_000))
@@ -118,10 +114,50 @@ object WannaHomeKt : KotlinPlugin(
 		//处理BOT被禁言
 		eventChannel.subscribeAlways<BotMuteEvent> {
 			val day = durationSeconds / 24 / 3600
-			bot.getFriend(Config.owner)?.sendMessage(String.format("%s <%s[%d]>在<%s[%d]>群禁言了bot，时长：%s%d:%02d:%02d" ,strTime(),operator.remarkOrNameCardOrNick, operator.id, group.name, group.id, if(day==0)"" else "$day day ", (durationSeconds / 3600) % 24, (durationSeconds / 60) % 60, durationSeconds % 60))
+			bot.getFriend(Config.owner)?.sendMessage(String.format("%s <%s[%d]>在<%s[%d]>群禁言了bot，时长：%s%d:%02d:%02d", strTime(), operator.remarkOrNameCardOrNick, operator.id, group.name, group.id, if (day == 0) "" else "$day day ", (durationSeconds / 3600) % 24, (durationSeconds / 60) % 60, durationSeconds % 60))
 		}
 		eventChannel.subscribeAlways<BotUnmuteEvent> {
 			bot.getFriend(Config.owner)?.sendMessage(String.format("%s <%s[%d]>在<%s[%d]>群取消禁言了bot", strTime(), operator.nameCardOrNick, operator.id, group.name, group.id))
+		}
+
+		eventChannel.subscribeAlways<FriendMessageEvent> {
+			if (Config.owner < 1) {
+				sender.sendMessage("未配置号主")
+			} else if (sender.id != Config.owner) {
+				sender.sendMessage("您不是号主")
+			} else {
+				message.contentsList().forEach {
+					if (it is PlainText) {
+						if (it.content.startsWith("/quit ")) {
+							val result = Regex("(?<=/quit )\\d+").find(it.content)?.value
+							if (result == null) {
+								sender.sendMessage("未输入有效群号")
+							} else if (bot.getGroup(result.toLong()) == null) {
+								sender.sendMessage("未找到要退出的群：[$result]")
+							} else {
+								val groupName = bot.getGroup(result.toLong())!!.name
+								if (!bot.getGroup(result.toLong())!!.quit())
+									sender.sendMessage("退出群聊<$groupName[$result]>失败")
+								//else
+									//sender.sendMessage("退出群聊<$groupName[$result]>成功")
+								//退出群聊成功的合并到bot离开群聊的消息推送
+							}
+						}
+						if (it.content.startsWith("/delete ")) {
+							val result = Regex("(?<=/delete )\\d+").find(it.content)?.value
+							if (result == null) {
+								sender.sendMessage("未输入有效好友QQ号")
+							} else if (bot.getFriend(result.toLong()) == null) {
+								sender.sendMessage("未找到要删除的好友：[$result]")
+							} else {
+								val friendName = bot.getFriend(result.toLong())!!.remarkOrNick
+								bot.getFriend(result.toLong())!!.delete()
+								sender.sendMessage("退出群聊<$friendName[$result]>成功")
+							}
+						}
+					}
+				}
+			}
 		}
 		eventChannel.subscribeAlways<MessageEvent> {
 			message.contentsList().forEach {
@@ -516,11 +552,16 @@ object WannaCommand : SimpleCommand(
 		output.add("/空地 <服务器/大区名/SML|海|森|白|沙|雪|个人|部队|准备>：获取服务器空地信息")
 		output.add("/空地 简称：获取服务器简称列表")
 		output.add("")
-		output.add(String.format("今日为第%d轮%d天", turn, diff % 9 + 1))
-		if (!canEntry)
-			output.add(String.format("下轮参与时间：%s点~%s点", unixTimeToStr(nextTurnStart.timeInMillis, true).substring(5, 13), unixTimeToStr((nextTurnStart.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 5) }.timeInMillis, true).substring(5, 13)))
+		if (Config.owner < 1)
+			output.add("当前未设置空房插件号主")
 		else
-			output.add(String.format("公示时间：%s点~%s点", unixTimeToStr(nextEventTime.timeInMillis, true).substring(5, 13), unixTimeToStr(nextTurnStart.timeInMillis, true).substring(5, 13)))
+			output.add(
+				"当前配置号主：" + Config.owner.toString().run { if (this.length > 4) this.take(2) + "*".repeat(this.length - 4) + this.takeLast(2) else this }
+			)
+		if (!canEntry)
+			output.add(String.format("今日为第%d轮%d天", turn, diff % 9 + 1) + String.format("下轮参与时间：%s点~%s点", unixTimeToStr(nextTurnStart.timeInMillis, true).substring(5, 13), unixTimeToStr((nextTurnStart.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 5) }.timeInMillis, true).substring(5, 13)))
+		else
+			output.add(String.format("今日为第%d轮%d天", turn, diff % 9 + 1) + String.format("公示时间：%s点~%s点", unixTimeToStr(nextEventTime.timeInMillis, true).substring(5, 13), unixTimeToStr(nextTurnStart.timeInMillis, true).substring(5, 13)))
 		output.add("")
 		output.add("感谢提供数据支持：")
 		output.add("Cettiidae/猹：https://home.ff14.cn/")

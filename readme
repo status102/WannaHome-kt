@@ -1,0 +1,6 @@
+Config中可以配置号主
+owner: xxxxxx
+
+配置后可使用
+- /quit +群号退出群聊
+- /delete +QQ号删除好友
