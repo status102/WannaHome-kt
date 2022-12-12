@@ -45,6 +45,7 @@ val HouseDataList = listOf(HouseInfo(), VoteInfoCha(), VoteInfoHouseHelper())
 const val outdatedWarn: Long = 24 * 60 * 60//
 const val outdatedWarnChar = "※"
 const val outdatedWarnTips = "未更新数据"
+const val oldDataTag = "[过期]"
 
 val houseTipsGroup = setOf<Long>(
 	1074761017,//海猫房群
@@ -63,7 +64,7 @@ val client = OkHttpClient.Builder()
 var font: Font? = null
 
 object WannaHomeKt : KotlinPlugin(
-	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.2.4")
+	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.2.5")
 	{ author("status102") }
 ) {
 	override fun onEnable() {
@@ -139,7 +140,7 @@ object WannaHomeKt : KotlinPlugin(
 								if (!bot.getGroup(result.toLong())!!.quit())
 									sender.sendMessage("退出群聊<$groupName[$result]>失败")
 								//else
-									//sender.sendMessage("退出群聊<$groupName[$result]>成功")
+								//sender.sendMessage("退出群聊<$groupName[$result]>成功")
 								//退出群聊成功的合并到bot离开群聊的消息推送
 							}
 						}
@@ -246,12 +247,19 @@ fun pornhub(porn: String = "Porn", hub: String = "Hub"): Surface {
 	return surface
 }
 */
-
-fun trans(nowTimeStamp: Long, outdatedLimit: Long, showServerName: Boolean): (PlotInfo) -> String =
+/**
+ * 按[M 海01-05]参与:1,118人（中奖5号）格式标注
+ *
+ * @param outdatedLimit 过期时间点（秒）
+ */
+fun trans(nowTimeStamp: Long, showServerName: Boolean, outdatedLimit: Long, thisTurnStart: Long): (PlotInfo) -> String =
 	{ sale ->
 		val output = StringBuilder()
-		if (sale.SaleState == 1 && nowTimeStamp - sale.Update >= outdatedLimit)
+		//对有数据
+		if (sale.SaleState == 1 && (nowTimeStamp - sale.Update) >= outdatedLimit)
 			output.append(outdatedWarnChar)
+		if (sale.SaleState == 0 && sale.Update < thisTurnStart)
+			output.append(oldDataTag)
 		output.append(String.format("[%s %s%s%02d-%02d]", sizeMap[sale.Size], if (showServerName) "${serverNameMap[sale.ServerId]?.substring(0, 2)} " else "", territoryMap[sale.TerritoryId], sale.WardId + 1, sale.HouseId + 1))
 		if (sale.SaleState in 1..2)
 			output.append(String.format(" 参与:%,d人", sale.VoteCount))
@@ -366,6 +374,7 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 			fcList = fcList.filter { limitStr.contains(territoryMap[it.TerritoryId] ?: "") }
 		}
 	}
+	//排序
 	personList = personList.run { asSequence().sortedBy { it.WardId * 60 + it.HouseId }.sortedBy { it.TerritoryId }.sortedBy { it.ServerId }.sortedByDescending { it.VoteCount }.sortedByDescending { it.Size }.toList() }
 	fcList = fcList.run { asSequence().sortedBy { it.WardId * 60 + it.HouseId }.sortedBy { it.TerritoryId }.sortedBy { it.ServerId }.sortedByDescending { it.VoteCount }.sortedByDescending { it.Size }.toList() }
 
@@ -399,8 +408,8 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 		outdatedTime = "公布后"
 	}
 
-	val personTextList = personList.map(trans(now, outdatedLimit, showServerName)).take(personShow)
-	val fcTextList = fcList.map(trans(now, outdatedLimit, showServerName)).take(fcShow)
+	val personTextList = personList.map(trans(now, showServerName, outdatedLimit, thisTurnStart)).take(personShow)
+	val fcTextList = fcList.map(trans(now, showServerName, outdatedLimit, thisTurnStart)).take(fcShow)
 
 	val title = (String.format("[第%s轮第%s天-%s中]<%s>%s：", turn, diff % 9 + 1, if (canEntry) "参与" else "公示", serverName, limitStr.uppercase(Locale.getDefault())))
 	val outputTitle = mutableListOf<String>()
@@ -422,7 +431,7 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 	}
 	if (!limitStr.contains("个人") && personList.isNotEmpty()) outputPerson.add(String.format("个人：%,d %s", personList.size, personSizeStr))
 	outputPerson.addAll(personTextList)
-	val textPerson = outputPerson.map { if (it.startsWith(outdatedWarnChar)) Pair(TextLine.make(it.substring(1), font), grey) else Pair(TextLine.make(it, font), black) }
+	val textPerson = outputPerson.map { if (it.startsWith(outdatedWarnChar) || it.startsWith(oldDataTag)) Pair(TextLine.make(it.removePrefix(outdatedWarnChar), font), grey) else Pair(TextLine.make(it, font), black) }
 
 	val outputFc = mutableListOf<String>()
 	val fcSizeStr = mutableListOf<String>().run {
@@ -434,7 +443,8 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 	}
 	if (!limitStr.contains("部队") && fcList.isNotEmpty()) outputFc.add(String.format("部队：%,d %s", fcList.size, fcSizeStr))
 	outputFc.addAll(fcTextList)
-	val textFc = outputFc.map { if (it.startsWith(outdatedWarnChar)) Pair(TextLine.make(it.substring(1), font), grey) else Pair(TextLine.make(it, font), black) }
+	// 文本转成text行
+	val textFc = outputFc.map { if (it.startsWith(outdatedWarnChar) || it.startsWith(oldDataTag)) Pair(TextLine.make(it.removePrefix(outdatedWarnChar), font), grey) else Pair(TextLine.make(it, font), black) }
 
 	val outputBottom = mutableListOf<String>()
 	outputBottom.add("")
@@ -552,12 +562,6 @@ object WannaCommand : SimpleCommand(
 		output.add("/空地 <服务器/大区名/SML|海|森|白|沙|雪|个人|部队|准备>：获取服务器空地信息")
 		output.add("/空地 简称：获取服务器简称列表")
 		output.add("")
-		if (Config.owner < 1)
-			output.add("当前未设置空房插件号主")
-		else
-			output.add(
-				"当前配置号主：" + Config.owner.toString().run { if (this.length > 4) this.take(2) + "*".repeat(this.length - 4) + this.takeLast(2) else this }
-			)
 		if (!canEntry)
 			output.add(String.format("今日为第%d轮%d天", turn, diff % 9 + 1) + String.format("下轮参与时间：%s点~%s点", unixTimeToStr(nextTurnStart.timeInMillis, true).substring(5, 13), unixTimeToStr((nextTurnStart.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 5) }.timeInMillis, true).substring(5, 13)))
 		else
@@ -580,6 +584,12 @@ object WannaCommand : SimpleCommand(
 			)
 		)
 		output.add("")
+		if (Config.owner < 1)
+			output.add("当前未配置插件号主")
+		else
+			output.add(
+				"当前配置号主：" + Config.owner.toString().run { if (this.length > 4) this.take(2) + "*".repeat(this.length - 4) + this.takeLast(2) else this }
+			)
 		output.add("所有空地信息均由玩家上传，希望更多人能加入上传信息的队列")
 		output.add("By status102/依琳娜")
 
