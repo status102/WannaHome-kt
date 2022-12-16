@@ -50,6 +50,6 @@ abstract class TimeCalculator {
 	}
 
 	val nextUpdateTime = (start.clone() as Calendar).apply {
-		add(Calendar.DAY_OF_MONTH, ((turn - 1) * 9 + 5))
+		add(Calendar.DAY_OF_MONTH, ((turn - 1) * 9 + diff))
 	}.timeInMillis
 }
