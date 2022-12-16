@@ -13,7 +13,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
 import net.mamoe.mirai.console.data.AutoSavePluginData
 import net.mamoe.mirai.console.data.value
 import net.mamoe.mirai.utils.warning
@@ -34,7 +33,7 @@ object HouseHelpeLogger : AutoSavePluginData("VoteInfo_HouseHelper_Log") {
 	var MinMillis by value(Long.MAX_VALUE)
 }
 
-class VoteInfoHouseHelper : IVoteInfoOperate {
+class VoteInfoHouseHelper : VoteInfoOperate() {
 
 	companion object {
 		init {
@@ -76,14 +75,12 @@ class VoteInfoHouseHelper : IVoteInfoOperate {
 		}
 	}
 
-	private val jsonDecoder: Json by lazy {
-		Json { ignoreUnknownKeys = true }
-	}
 	override val sourceName: String = "Jim"
 
-	override suspend fun run(serverId: Int, lastTurnStart: Long, thisTurnStart: Long): Map<String, PlotInfo> {
+	override suspend fun run(serverId: Int): Map<String, PlotInfo> {
 		//WannaHomeKt.logger.info { "开始获取HouseHelper[${serverNameMap[serverId]}]" }
 
+		val time = TimeCalculator.getInstance()
 		val voteInfoMap = mutableMapOf<String, PlotInfo>()
 		val startTimeStamp = Calendar.getInstance().timeInMillis
 		withContext(Dispatchers.IO) {
@@ -103,7 +100,7 @@ class VoteInfoHouseHelper : IVoteInfoOperate {
 					val voteInfoList = jsonDecoder.decodeFromString<List<VoteInfo>>(str)
 
 					voteInfoList.filter { voteInfo ->
-						voteInfo.LastSeen >= thisTurnStart || (voteInfo.UpdateTime >= lastTurnStart && voteInfo.State == 3)
+						voteInfo.LastSeen >= time.thisTurnStart || (voteInfo.UpdateTime >= time.lastTurnStart && voteInfo.State == 3)
 					}.forEach {
 						it.TerritoryId = territoryMap.keys.toList()[it.TerritoryId]//将房区序号改为房区ID
 						voteInfoMap.run {
@@ -118,7 +115,7 @@ class VoteInfoHouseHelper : IVoteInfoOperate {
 									this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"]!!.Update = it.UpdateTime
 								}
 							} else {*/
-							if (it.UpdateTime < thisTurnStart && it.LastSeen >= thisTurnStart)
+							if (it.UpdateTime < time.thisTurnStart && it.LastSeen >= time.thisTurnStart)
 								this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"] = PlotInfo(serverId, it.TerritoryId, it.WardId, it.houseNum - 1, it.Size, it.LastSeen, 0, 0, 0)
 							else
 								this["$serverId-${it.TerritoryId}-${it.WardId}-${it.houseNum - 1}"] = PlotInfo(serverId, it.TerritoryId, it.WardId, it.houseNum - 1, it.Size, it.UpdateTime, it.State, it.VoteCount, it.WinnerIndex)

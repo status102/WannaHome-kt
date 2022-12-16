@@ -103,4 +103,5 @@ val serverMap: Map<String, List<String>> = mapOf(
 	"狗" to listOf("水晶塔", "银泪湖", "太阳海岸", "伊修加德", "红茶川")
 )
 val territoryMap: Map<Int, String> = mapOf(339 to "海", 340 to "森", 341 to "沙", 641 to "白", 979 to "雪")
+
 val sizeMap: List<String> = listOf("S", "M", "L")

@@ -13,7 +13,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
 import net.mamoe.mirai.console.data.AutoSavePluginData
 import net.mamoe.mirai.console.data.value
 import net.mamoe.mirai.utils.warning
@@ -32,7 +31,7 @@ object CettiidaeLogger : AutoSavePluginData("VoteInfo_Cettiidae_Log") {
 	var MinMillis by value(Long.MAX_VALUE)
 }
 
-class VoteInfoCha : IVoteInfoOperate {
+class VoteInfoCha : VoteInfoOperate() {
 	companion object {
 		init {
 			Logger.reload()
@@ -75,14 +74,12 @@ class VoteInfoCha : IVoteInfoOperate {
 		}
 	}
 
-	private val jsonDecoder: Json by lazy {
-		Json { ignoreUnknownKeys = true }
-	}
 	override val sourceName: String = "猹"
 
-	override suspend fun run(serverId: Int, lastTurnStart: Long, thisTurnStart: Long): Map<String, PlotInfo> {
+	override suspend fun run(serverId: Int): Map<String, PlotInfo> {
 		//WannaHomeKt.logger.info { "开始获取猹[${serverNameMap[serverId]}]" }
 
+		val time = TimeCalculator.getInstance()
 		val voteInfoMap = mutableMapOf<String, PlotInfo>()
 		val startTimeStamp = Calendar.getInstance().timeInMillis
 		withContext(Dispatchers.IO) {
@@ -101,7 +98,7 @@ class VoteInfoCha : IVoteInfoOperate {
 					val voteInfoList = jsonDecoder.decodeFromString<List<VoteInfo>>(str)
 
 					voteInfoList.filter { voteInfo ->
-						strTimeToUnix(voteInfo.updateTimeStr) >= thisTurnStart || (strTimeToUnix(voteInfo.updateTimeStr) >= lastTurnStart && voteInfo.IsSell == 3)
+						strTimeToUnix(voteInfo.updateTimeStr) >= time.thisTurnStart || (strTimeToUnix(voteInfo.updateTimeStr) >= time.lastTurnStart && voteInfo.IsSell == 3)
 					}.forEach {
 						voteInfoMap.run {
 							/*if (containsKey("${it.TerritoryId}-${it.WardId}-${it.HouseId}")) {

@@ -2,6 +2,7 @@ package cn.status102
 
 import kotlinx.coroutines.*
 import net.mamoe.mirai.Bot
+import net.mamoe.mirai.contact.Group
 import net.mamoe.mirai.utils.info
 import java.util.*
 import kotlin.math.floor
@@ -72,13 +73,7 @@ suspend fun sendNoteMessage() {
 	val thisTurnStart = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, (turn - 1) * 9) }
 	val thisTurnShow = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, (turn - 1) * 9 + 5) }
 	val nextTurnStart = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, (turn) * 9) }
-	val nextEventTime = (start.clone() as Calendar).apply {
-		if (canEntry)
-			add(Calendar.DAY_OF_MONTH, ((turn - 1) * 9 + 5))
-		else
-			add(Calendar.DAY_OF_MONTH, turn * 9)
-	}
-	val nextEventTimeStr = String.format("%d号%02d点", nextEventTime.get(Calendar.DAY_OF_MONTH), nextEventTime.get(Calendar.HOUR_OF_DAY))
+
 
 	output.appendLine("第${turn}轮${if (canEntry) "摇号" else "公示"}已开始")
 	if (!canEntry)
@@ -108,7 +103,7 @@ suspend fun sendNoteMessage() {
 					launch {
 						bot.getGroup(it)?.run {
 							delay(random().nextLong(30_000, 120_000))
-							changeBotGroupNameCard(this, canEntry, nextEventTimeStr)
+							changeBotGroupNameCard(this, canEntry)
 							sendMessage(output.toString().trimEnd('\n'))
 						}
 					}
@@ -127,13 +122,6 @@ suspend fun sendTipMessage() {
 	val turn = diff / 9 + 1
 	val canEntry = (diff % 9) < 5
 	val output = StringBuilder()
-	val nextEventTime = (start.clone() as Calendar).apply {
-		if (canEntry)
-			add(Calendar.DAY_OF_MONTH, ((turn - 1) * 9 + 5))
-		else
-			add(Calendar.DAY_OF_MONTH, turn * 9)
-	}
-	val nextEventTimeStr = String.format("%d号%02d点", nextEventTime.get(Calendar.DAY_OF_MONTH), nextEventTime.get(Calendar.HOUR_OF_DAY))
 
 	output.appendLine("第${turn}轮${if (canEntry) "摇号" else "公示"}今晚即将结束，请注意结束时间以免错过")
 
@@ -156,12 +144,29 @@ suspend fun sendTipMessage() {
 					launch {
 						bot.getGroup(it)?.run {
 							delay(Random(Calendar.getInstance().timeInMillis).nextLong(30_000, 120_000))
-							changeBotGroupNameCard(this, canEntry, nextEventTimeStr)
+							changeBotGroupNameCard(this, canEntry)
 							sendMessage(output.toString().trimEnd('\n'))
 						}
 					}
 				}
 			}
 		}
+	}
+}
+
+
+/**
+ * 修改BOT群名片中的提示文本【(下轮抽奖|本轮公示)】
+ */
+fun changeBotGroupNameCard(group: Group?, canEntry: Boolean) {
+	if(group == null)return
+	val nextEventTimeStr = String.format("%d号%02d点", TimeCalculator.getInstance().nextEventDate.get(Calendar.DAY_OF_MONTH), TimeCalculator.getInstance().nextEventDate.get(Calendar.HOUR_OF_DAY))
+	group.botAsMember.apply {
+		nameCard = nameCard.replace(Regex("【.+?(】|$)"), "").let { nameCard ->
+			if (nameCard.isEmpty() || nameCard.isBlank())
+				nick
+			else
+				nameCard
+		} + "【${if (!canEntry) "下轮抽奖" else "本轮公示"}${nextEventTimeStr}】"
 	}
 }

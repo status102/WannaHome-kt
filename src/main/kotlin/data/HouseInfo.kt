@@ -1,5 +1,6 @@
 package cn.status102.data
 
+import cn.status102.TimeCalculator
 import cn.status102.WannaHomeKt
 import cn.status102.WannaHomeKt.reload
 import cn.status102.client
@@ -15,7 +16,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
 import net.mamoe.mirai.console.data.AutoSavePluginData
 import net.mamoe.mirai.console.data.value
 import net.mamoe.mirai.utils.warning
@@ -36,7 +36,7 @@ object BingyinLogger : AutoSavePluginData("Wanahome_Bingyin_Log") {
 	var MinMillis by value(Long.MAX_VALUE)
 }
 
-class HouseInfo : IVoteInfoOperate {
+class HouseInfo : VoteInfoOperate() {
 
 	companion object {
 		init {
@@ -79,13 +79,11 @@ class HouseInfo : IVoteInfoOperate {
 		}
 	}
 
-	private val jsonDecoder: Json by lazy {
-		Json { ignoreUnknownKeys = true }
-	}
 	override val sourceName: String = "冰音"
 
-	override suspend fun run(serverId: Int, lastTurnStart: Long, thisTurnStart: Long): Map<String, PlotInfo> {
+	override suspend fun run(serverId: Int): Map<String, PlotInfo> {
 		//WannaHomeKt.logger.info { "开始获取${sourceName}[${serverNameMap[serverId]}]" }
+		val time = TimeCalculator.getInstance()
 		val voteInfoMap = mutableMapOf<String, PlotInfo>()
 		val startTimeStamp = Calendar.getInstance().timeInMillis
 
@@ -103,7 +101,7 @@ class HouseInfo : IVoteInfoOperate {
 				}
 				if (response.isSuccessful && str.isNotEmpty()) {
 					val saleList = jsonDecoder.decodeFromString<ServerData>(str)
-					val lastShow = lastTurnStart + 5 * 24 * 3600
+					val lastShow = time.lastTurnStart + 5 * 24 * 3600
 					//WannaHomeKt.logger.info  { "冰音：${saleList.OnSale.size}，${saleList.LastUpdate}-${thisTurnStart}" }
 					if (saleList.LastUpdate >= (Calendar.getInstance().timeInMillis) / 1000 - 5 * 24 * 3600)
 						saleList.OnSale

@@ -45,7 +45,7 @@ val HouseDataList = listOf(HouseInfo(), VoteInfoCha(), VoteInfoHouseHelper())
 const val outdatedWarn: Long = 24 * 60 * 60//
 const val outdatedWarnChar = "※"
 const val outdatedWarnTips = "未更新数据"
-const val oldDataTag = "[过期]"
+const val oldDataTag = "[旧]"
 
 val houseTipsGroup = setOf<Long>(
 	1074761017,//海猫房群
@@ -64,7 +64,7 @@ val client = OkHttpClient.Builder()
 var font: Font? = null
 
 object WannaHomeKt : KotlinPlugin(
-	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.2.5")
+	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.2.6")
 	{ author("status102") }
 ) {
 	override fun onEnable() {
@@ -252,13 +252,16 @@ fun pornhub(porn: String = "Porn", hub: String = "Hub"): Surface {
  *
  * @param outdatedLimit 过期时间点（秒）
  */
-fun trans(nowTimeStamp: Long, showServerName: Boolean, outdatedLimit: Long, thisTurnStart: Long): (PlotInfo) -> String =
+fun trans(nowTimeStamp: Long, showServerName: Boolean, outdatedLimit: Long): (PlotInfo) -> String =
 	{ sale ->
 		val output = StringBuilder()
+		val time = TimeCalculator.getInstance()
+		//M字符宽度较长
+		val sizeMap: List<String> = listOf("S ", "M", "L ")
 		//对有数据
 		if (sale.SaleState == 1 && (nowTimeStamp - sale.Update) >= outdatedLimit)
 			output.append(outdatedWarnChar)
-		if (sale.SaleState == 0 && sale.Update < thisTurnStart)
+		if (sale.SaleState == 0 && sale.Update < time.thisTurnStart)
 			output.append(oldDataTag)
 		output.append(String.format("[%s %s%s%02d-%02d]", sizeMap[sale.Size], if (showServerName) "${serverNameMap[sale.ServerId]?.substring(0, 2)} " else "", territoryMap[sale.TerritoryId], sale.WardId + 1, sale.HouseId + 1))
 		if (sale.SaleState in 1..2)
@@ -271,24 +274,12 @@ fun trans(nowTimeStamp: Long, showServerName: Boolean, outdatedLimit: Long, this
 	}
 
 suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0, limitStr: String): Surface {
-
+	val time = TimeCalculator.getInstance()
 	val now = Calendar.getInstance().timeInMillis / 1000
-	val start = Calendar.getInstance().apply { time = strTimeToDate("2022-08-08 23:00:00") }
-	val diff = floor((now - start.timeInMillis / 1000) / 60.0 / 60 / 24).toInt()
-	val turn = diff / 9 + 1
-	val canEntry = (diff % 9) < 5
-	val lastTurnStart = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, (turn - 2) * 9) }.timeInMillis / 1000
-	val thisTurnStart = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, (turn - 1) * 9) }.timeInMillis / 1000
-	val thisTurnShow = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, (turn - 1) * 9 + 5) }.timeInMillis / 1000
-	val nextEventTime = (start.clone() as Calendar).apply {
-		if (canEntry)
-			add(Calendar.DAY_OF_MONTH, ((turn - 1) * 9 + 5))
-		else
-			add(Calendar.DAY_OF_MONTH, turn * 9)
-	}
+
 	val plotInfoMap = mutableMapOf<String, PlotInfo>()
 
-	val channel = WannaCommand.getHouseData(serverList, lastTurnStart, thisTurnStart)
+	val channel = WannaCommand.getHouseData(serverList)
 	val successCount = MutableList(HouseDataList.size) { 0 }
 	withTimeoutOrNull(40_000) {
 		repeat(HouseDataList.size * serverList.size) {
@@ -303,7 +294,7 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 							if (plotInfoMap.containsKey(key)) {
 								if (plotInfoMap[key]!!.SaleState == 0 ||
 									(it.Update > plotInfoMap[key]!!.Update &&
-											((it.Update >= thisTurnStart && plotInfoMap[key]!!.Update < thisTurnStart) || it.SaleState != 0))
+											((it.Update >= time.thisTurnStart && plotInfoMap[key]!!.Update < time.thisTurnStart) || it.SaleState != 0))
 								) {
 									plotInfoMap[key]!!.VoteCount = it.VoteCount
 									plotInfoMap[key]!!.WinnerIndex = it.WinnerIndex
@@ -337,8 +328,8 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 
 	plotList.forEach {
 		//将上一轮的[准备中、无人中奖]归入该轮出售
-		if ((it.SaleState == 3 || (it.SaleState == 2 && it.WinnerIndex == 0)) && it.Update < thisTurnStart) {
-			it.Update = thisTurnStart
+		if ((it.SaleState == 3 || (it.SaleState == 2 && it.WinnerIndex == 0)) && it.Update < time.thisTurnStart) {
+			it.Update = time.thisTurnStart
 			it.SaleState = 0
 		}
 		//把无状态的房屋放在最后
@@ -350,7 +341,7 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 			it.WinnerIndex = -1
 		}
 	}
-	plotList = plotList.filter { it.Update >= lastTurnStart && (it.SaleState == 0 || it.Update >= thisTurnStart) }.toMutableList()
+	plotList = plotList.filter { it.Update >= time.lastTurnStart && (it.SaleState == 0 || it.Update >= time.thisTurnStart) }.toMutableList()
 
 	//分离部队房和个人房
 	var personList = plotList.filter { it.WardId < fcIdStart }
@@ -394,8 +385,8 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 	 */
 	var outdatedLimit: Long
 	val outdatedTime: String
-	if (canEntry) {
-		outdatedLimit = maxOf(10 * 60.0, minOf(outdatedWarn.toDouble(), (now - thisTurnStart) * 0.7, (thisTurnShow - now) * 0.7)).toLong()
+	if (time.canEntry) {
+		outdatedLimit = maxOf(10 * 60.0, minOf(outdatedWarn.toDouble(), (now - time.thisTurnStart) * 0.7, (time.thisTurnShow - now) * 0.7)).toLong()
 		outdatedTime = if (outdatedLimit / 60 >= 60) {
 			outdatedLimit = (outdatedLimit / 60.0 / 60).roundToLong() * 60 * 60
 			"超过${outdatedLimit / 60 / 60}小时"
@@ -404,14 +395,14 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 			"超过${outdatedLimit / 60}分钟"
 		}
 	} else {
-		outdatedLimit = now - thisTurnShow
+		outdatedLimit = now - time.thisTurnShow
 		outdatedTime = "公布后"
 	}
 
-	val personTextList = personList.map(trans(now, showServerName, outdatedLimit, thisTurnStart)).take(personShow)
-	val fcTextList = fcList.map(trans(now, showServerName, outdatedLimit, thisTurnStart)).take(fcShow)
+	val personTextList = personList.map(trans(now, showServerName, outdatedLimit)).take(personShow)
+	val fcTextList = fcList.map(trans(now, showServerName, outdatedLimit)).take(fcShow)
 
-	val title = (String.format("[第%s轮第%s天-%s中]<%s>%s：", turn, diff % 9 + 1, if (canEntry) "参与" else "公示", serverName, limitStr.uppercase(Locale.getDefault())))
+	val title = (String.format("[第%s轮第%s天-%s中]<%s>%s：",time.turn, time.diff % 9 + 1, if (time.canEntry) "参与" else "公示", serverName, limitStr.uppercase(Locale.getDefault())))
 	val outputTitle = mutableListOf<String>()
 	if (personList.isEmpty() && fcTextList.isEmpty()) {
 		outputTitle.add(title)
@@ -540,21 +531,8 @@ object WannaCommand : SimpleCommand(
 
 		val font = Font(font?.typefaceOrDefault)
 		font.size = 36f
-		val now = Calendar.getInstance().time.time
-		val start = Calendar.getInstance().apply { time = strTimeToDate("2022-08-08 23:00:00") }
 
-		val diff = floor((now - start.time.time) / 1000 / 60.0 / 60 / 24).toInt()
-		val turn = diff / 9 + 1
-		val canEntry = (diff % 9) < 5
-		val nextEventTime = (start.clone() as Calendar).apply {
-			if (canEntry)
-				add(Calendar.DAY_OF_MONTH, ((turn - 1) * 9 + 5))
-			else
-				add(Calendar.DAY_OF_MONTH, turn * 9)
-		}
-		val thisTurnStart = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, (turn - 1) * 9) }
-		val nextTurnStart = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, turn * 9) }
-		val nextEventTimeStr = String.format("%d号%02d:%02d", nextEventTime.get(Calendar.DAY_OF_MONTH), nextEventTime.get(Calendar.HOUR_OF_DAY), nextEventTime.get(Calendar.MINUTE))
+		val time = TimeCalculator.getInstance()
 
 		val output = mutableListOf<String>()
 		output.add("使用方法：")
@@ -562,10 +540,10 @@ object WannaCommand : SimpleCommand(
 		output.add("/空地 <服务器/大区名/SML|海|森|白|沙|雪|个人|部队|准备>：获取服务器空地信息")
 		output.add("/空地 简称：获取服务器简称列表")
 		output.add("")
-		if (!canEntry)
-			output.add(String.format("今日为第%d轮%d天", turn, diff % 9 + 1) + String.format("下轮参与时间：%s点~%s点", unixTimeToStr(nextTurnStart.timeInMillis, true).substring(5, 13), unixTimeToStr((nextTurnStart.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 5) }.timeInMillis, true).substring(5, 13)))
+		if (!time.canEntry)
+			output.add(String.format("今日为第%d轮%d天", time.turn, time.diff % 9 + 1) + String.format("下轮参与时间：%s点~%s点", unixTimeToStr(time.nextTurnStart).substring(5, 13), unixTimeToStr(time.nextTurnShow).substring(5, 13)))
 		else
-			output.add(String.format("今日为第%d轮%d天", turn, diff % 9 + 1) + String.format("公示时间：%s点~%s点", unixTimeToStr(nextEventTime.timeInMillis, true).substring(5, 13), unixTimeToStr(nextTurnStart.timeInMillis, true).substring(5, 13)))
+			output.add(String.format("今日为第%d轮%d天", time.turn, time.diff % 9 + 1) + String.format("公示时间：%s点~%s点", unixTimeToStr(time.nextEventTime).substring(5, 13), unixTimeToStr(time.nextTurnStart).substring(5, 13)))
 		output.add("")
 		output.add("感谢提供数据支持：")
 		output.add("Cettiidae/猹：https://home.ff14.cn/")
@@ -578,9 +556,9 @@ object WannaCommand : SimpleCommand(
 		output.add(
 			String.format(
 				"%.3f/%.3f/%.3fs[%,d/%,d]，%.3f/%.3f/%.3fs[%,d/%,d]，%.3f/%.3f/%.3fs[%,d/%,d]",
-				VoteInfoCha.Logger.MinMillis.toDouble() / 1000, VoteInfoCha.Logger.MaxMillis.toDouble() / 1000, VoteInfoCha.Logger.TimeMillis.toDouble() / VoteInfoCha.Logger.CallTimes / 1000, VoteInfoCha.Logger.FailTimes, VoteInfoCha.Logger.CallTimes,
-				HouseInfo.Logger.MinMillis.toDouble() / 1000, HouseInfo.Logger.MaxMillis.toDouble() / 1000, HouseInfo.Logger.TimeMillis.toDouble() / HouseInfo.Logger.CallTimes / 1000, HouseInfo.Logger.FailTimes, HouseInfo.Logger.CallTimes,
-				VoteInfoHouseHelper.Logger.MinMillis.toDouble() / 1000, VoteInfoHouseHelper.Logger.MaxMillis.toDouble() / 1000, VoteInfoHouseHelper.Logger.TimeMillis.toDouble() / VoteInfoHouseHelper.Logger.CallTimes / 1000, VoteInfoHouseHelper.Logger.FailTimes, VoteInfoHouseHelper.Logger.CallTimes,
+				VoteInfoCha.Logger.MinMillis / 1000.0, VoteInfoCha.Logger.MaxMillis / 1000.0, VoteInfoCha.Logger.TimeMillis.toDouble()  / 1000.0 / VoteInfoCha.Logger.CallTimes, VoteInfoCha.Logger.FailTimes, VoteInfoCha.Logger.CallTimes,
+				HouseInfo.Logger.MinMillis / 1000.0, HouseInfo.Logger.MaxMillis / 1000.0, HouseInfo.Logger.TimeMillis.toDouble()  / 1000.0/HouseInfo.Logger.CallTimes , HouseInfo.Logger.FailTimes, HouseInfo.Logger.CallTimes,
+				VoteInfoHouseHelper.Logger.MinMillis / 1000.0, VoteInfoHouseHelper.Logger.MaxMillis / 1000.0, VoteInfoHouseHelper.Logger.TimeMillis.toDouble()/ 1000.0 / VoteInfoHouseHelper.Logger.CallTimes , VoteInfoHouseHelper.Logger.FailTimes, VoteInfoHouseHelper.Logger.CallTimes,
 			)
 		)
 		output.add("")
@@ -591,7 +569,7 @@ object WannaCommand : SimpleCommand(
 				"当前配置号主：" + Config.owner.toString().run { if (this.length > 4) this.take(2) + "*".repeat(this.length - 4) + this.takeLast(2) else this }
 			)
 		output.add("所有空地信息均由玩家上传，希望更多人能加入上传信息的队列")
-		output.add("By status102/依琳娜")
+		output.add("By status102")
 
 		val outputTextLine = output.map { TextLine.make(it, font) }
 
@@ -667,10 +645,9 @@ object WannaCommand : SimpleCommand(
 			else
 				add(Calendar.DAY_OF_MONTH, turn * 9)
 		}
-		val nextEventTimeStr = String.format("%d号%02d点", nextEventTime.get(Calendar.DAY_OF_MONTH), nextEventTime.get(Calendar.HOUR_OF_DAY))
-		commandContext.sender.getGroupOrNull()?.run {
-			changeBotGroupNameCard(this, canEntry, nextEventTimeStr)
-		}
+
+		changeBotGroupNameCard(commandContext.sender.getGroupOrNull(), canEntry)
+
 		val output = getServerData(commandContext.sender.getGroupOrNull()?.id, search, realName, size.uppercase(Locale.getDefault())) { i, _ -> i >= 30 }.trimEnd('\n')
 		runBlocking {
 			try {
@@ -713,10 +690,9 @@ object WannaCommand : SimpleCommand(
 			else
 				add(Calendar.DAY_OF_MONTH, turn * 9)
 		}
-		val nextEventTimeStr = String.format("%d号%02d点", nextEventTime.get(Calendar.DAY_OF_MONTH), nextEventTime.get(Calendar.HOUR_OF_DAY))
-		commandContext.sender.getGroupOrNull()?.run {
-			changeBotGroupNameCard(this, canEntry, nextEventTimeStr)
-		}
+
+		changeBotGroupNameCard(commandContext.sender.getGroupOrNull(), canEntry)
+
 		try {
 			getPic(realName, search, commandContext.sender.getGroupOrNull()?.id ?: 0, limitStr.uppercase(Locale.getDefault()))
 				.use { surface ->
@@ -771,7 +747,7 @@ object WannaCommand : SimpleCommand(
 	}
 
 	@OptIn(DelicateCoroutinesApi::class)
-	suspend fun getHouseData(serverIdList: List<Int>, lastTurnStart: Long, thisTurnStart: Long): Channel<Triple<IVoteInfoOperate, Boolean, Map<String, PlotInfo>>> {
+	suspend fun getHouseData(serverIdList: List<Int>): Channel<Triple<IVoteInfoOperate, Boolean, Map<String, PlotInfo>>> {
 		val channel = Channel<Triple<IVoteInfoOperate, Boolean, Map<String, PlotInfo>>>(Channel.UNLIMITED)
 
 		GlobalScope.launch {
@@ -779,7 +755,7 @@ object WannaCommand : SimpleCommand(
 				HouseDataList.forEach {
 					launch {
 						try {
-							channel.send(Triple(it, true, it.run(serverId, lastTurnStart, thisTurnStart)))
+							channel.send(Triple(it, true, it.run(serverId)))
 						} catch (e: Exception) {
 							WannaHomeKt.logger.error { "${it.sourceName}获取网络数据出错：${e.stackTraceToString()}" }
 							channel.send(Triple(it, false, mapOf()))
@@ -815,7 +791,7 @@ object WannaCommand : SimpleCommand(
 			val output = java.lang.StringBuilder()
 			output.appendLine(String.format("[第%s轮第%s天-%s中]<%s>%s：", turn, diff % 9 + 1, if (canEntry) "参与" else "公示", serverName, limitStr.uppercase(Locale.getDefault())))
 
-			val channel = getHouseData(searchList, lastTurnStart, thisTurnStart)
+			val channel = getHouseData(searchList)
 			repeat(HouseDataList.size * searchList.size) {
 				channel.receive().third.forEach { (key, it) ->
 					if (plotInfoMap.containsKey(key)) {
@@ -953,20 +929,6 @@ object WannaCommand : SimpleCommand(
 	}
 }
 
-
-/**
- * 修改BOT群名片中的提示文本【(下轮抽奖|本轮公示)】
- */
-fun changeBotGroupNameCard(group: Group, canEntry: Boolean, nextEventTimeStr: String) {
-	group.botAsMember.apply {
-		nameCard = nameCard.replace(Regex("【.+?(】|$)"), "").let { nameCard ->
-			if (nameCard.isEmpty() || nameCard.isBlank())
-				nick
-			else
-				nameCard
-		} + "【${if (!canEntry) "下轮抽奖" else "本轮公示"}${nextEventTimeStr}】"
-	}
-}
 
 fun diffTimeToStr(diff: Long, showMillis: Boolean = true, showDays: Boolean = false): String {
 	val diffSec = diff / 1000
