@@ -47,7 +47,7 @@ class VoteInfoHouseHelper : VoteInfoOperate() {
 			return Request.Builder().url(HomeUrl + serverId).get()
 				.cacheControl(CacheControl.Builder().maxAge(1, TimeUnit.MINUTES).build()).run {
 					//if (LastModified.isNotEmpty())
-						//this.addHeader("If-Modified-Since", LastModified)
+					//this.addHeader("If-Modified-Since", LastModified)
 					this
 				}.build()
 		}
@@ -57,19 +57,19 @@ class VoteInfoHouseHelper : VoteInfoOperate() {
 		}
 
 		suspend fun call(serverId: Int, reCallTimes: Int = 0, reCallTimesLimit: Int = 3): Response {
-			try {
-				return newCall(serverId).execute().apply {
+			 try {
+				 return newCall(serverId).execute().apply {
 					if (this.networkResponse != null)
 						CallTimes++
 				}
-			}  catch (e: Exception) {
+			} catch (e: Exception) {
 				CallTimes++
 				FailTimes++
-				if((e is SocketTimeoutException || e is UnknownHostException) && reCallTimes < reCallTimesLimit){
+				if ((e is SocketTimeoutException || e is UnknownHostException) && reCallTimes < reCallTimesLimit) {
 					delay(1500)
 					WannaHomeKt.logger.warning { "Jim尝试第${reCallTimes + 1}次获取[${serverNameMap[serverId]}]失败：$e" }
 					return call(serverId, reCallTimes + 1)
-				}else
+				} else
 					throw e
 			}
 		}

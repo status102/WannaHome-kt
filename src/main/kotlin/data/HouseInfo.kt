@@ -61,19 +61,19 @@ class HouseInfo : VoteInfoOperate() {
 		}
 
 		suspend fun call(serverId: Int, reCallTimes: Int = 0, reCallTimesLimit: Int = 3): Response {
-			return try {
-				newCall(serverId).execute().apply {
+			try {
+				return newCall(serverId).execute().apply {
 					if (networkResponse != null)
 						CallTimes++
 				}
 			} catch (e: Exception) {
 				CallTimes++
 				FailTimes++
-				if((e is SocketTimeoutException || e is UnknownHostException) && reCallTimes < reCallTimesLimit){
+				if ((e is SocketTimeoutException || e is UnknownHostException) && reCallTimes < reCallTimesLimit) {
 					delay(1500)
 					WannaHomeKt.logger.warning { "冰音尝试第${reCallTimes + 1}次获取[${serverNameMap[serverId]}]失败：$e" }
-					call(serverId, reCallTimes + 1)
-				}else
+					return call(serverId, reCallTimes + 1)
+				} else
 					throw e
 			}
 		}
