@@ -43,9 +43,10 @@ val HouseDataList = listOf(HouseInfo(), VoteInfoCha(), VoteInfoHouseHelper())
  * 超过8小时数据未更新
  */
 const val outdatedWarn: Long = 24 * 60 * 60//
-const val outdatedWarnChar = "※"
+const val outdatedWarnTag = "※"
 const val outdatedWarnTips = "未更新数据"
-const val oldDataTag = "[旧]"
+const val oldDataTag = "旧"
+const val spaceTag = "　"
 
 val houseTipsGroup = setOf<Long>(
 	1074761017,//海猫房群
@@ -64,7 +65,7 @@ val client = OkHttpClient.Builder()
 var font: Font? = null
 
 object WannaHomeKt : KotlinPlugin(
-	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.2.6")
+	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.2.7")
 	{ author("status102") }
 ) {
 	override fun onEnable() {
@@ -260,7 +261,7 @@ fun trans(nowTimeStamp: Long, showServerName: Boolean, outdatedLimit: Long): (Pl
 		val sizeMap: List<String> = listOf("S ", "M", "L ")
 		//对有数据
 		if (sale.SaleState == 1 && (nowTimeStamp - sale.Update) >= outdatedLimit)
-			output.append(outdatedWarnChar)
+			output.append(outdatedWarnTag)
 		if (sale.SaleState == 0 && sale.Update < time.thisTurnStart)
 			output.append(oldDataTag)
 		output.append(String.format("[%s %s%s%02d-%02d]", sizeMap[sale.Size], if (showServerName) "${serverNameMap[sale.ServerId]?.substring(0, 2)} " else "", territoryMap[sale.TerritoryId], sale.WardId + 1, sale.HouseId + 1))
@@ -385,6 +386,7 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 	 */
 	var outdatedLimit: Long
 	val outdatedTime: String
+	//计算抽奖人数数据过期期限
 	if (time.canEntry) {
 		outdatedLimit = maxOf(10 * 60.0, minOf(outdatedWarn.toDouble(), (now - time.thisTurnStart) * 0.7, (time.thisTurnShow - now) * 0.7)).toLong()
 		outdatedTime = if (outdatedLimit / 60 >= 60) {
@@ -402,7 +404,7 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 	val personTextList = personList.map(trans(now, showServerName, outdatedLimit)).take(personShow)
 	val fcTextList = fcList.map(trans(now, showServerName, outdatedLimit)).take(fcShow)
 
-	val title = (String.format("[第%s轮第%s天-%s中]<%s>%s：",time.turn, time.diff % 9 + 1, if (time.canEntry) "参与" else "公示", serverName, limitStr.uppercase(Locale.getDefault())))
+	val title = (String.format("[第%s轮第%s天-%s中]<%s>%s：", time.turn, time.diff % 9 + 1, if (time.canEntry) "参与" else "公示", serverName, limitStr.uppercase(Locale.getDefault())))
 	val outputTitle = mutableListOf<String>()
 	if (personList.isEmpty() && fcTextList.isEmpty()) {
 		outputTitle.add(title)
@@ -412,34 +414,48 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 	}
 	val textTitle = outputTitle.map { Pair(TextLine.make(it, font), black) }
 
-	val outputPerson = mutableListOf<String>()
-	val personSizeStr = mutableListOf<String>().run {
-		if (personList.any { it.Size == 0 }) add(String.format("S %,d", personList.filter { it.Size == 0 }.size))
-		if (personList.any { it.Size == 1 }) add(String.format("M %,d", personList.filter { it.Size == 1 }.size))
-		if (personList.any { it.Size == 2 }) add(String.format("L %,d", personList.filter { it.Size == 2 }.size))
-		if (isNotEmpty()) joinTo(StringBuilder(), "/", "(", ")")
-		else ""
-	}
-	if (!limitStr.contains("个人") && personList.isNotEmpty()) outputPerson.add(String.format("个人：%,d %s", personList.size, personSizeStr))
-	outputPerson.addAll(personTextList)
-	val textPerson = outputPerson.map { if (it.startsWith(outdatedWarnChar) || it.startsWith(oldDataTag)) Pair(TextLine.make(it.removePrefix(outdatedWarnChar), font), grey) else Pair(TextLine.make(it, font), black) }
 
-	val outputFc = mutableListOf<String>()
-	val fcSizeStr = mutableListOf<String>().run {
-		if (fcList.any { it.Size == 0 }) add(String.format("S %,d", fcList.count { it.Size == 0 }))
-		if (fcList.any { it.Size == 1 }) add(String.format("M %,d", fcList.count { it.Size == 1 }))
-		if (fcList.any { it.Size == 2 }) add(String.format("L %,d", fcList.count { it.Size == 2 }))
-		if (isNotEmpty()) joinTo(StringBuilder(), "/", "(", ")")
-		else ""
+	val textPerson = personTextList.map {
+		if (it.startsWith(outdatedWarnTag) || it.startsWith(oldDataTag))
+			Pair(TextLine.make(it, font), grey)
+		else
+			Pair(TextLine.make(spaceTag + it, font), black)
+	}.toMutableList()
+	//添加标头
+	if (!limitStr.contains("个人") && personList.isNotEmpty()) {
+		val personSizeStr = mutableListOf<String>().run {
+			if (personList.any { it.Size == 0 }) add(String.format("S %,d", personList.filter { it.Size == 0 }.size))
+			if (personList.any { it.Size == 1 }) add(String.format("M %,d", personList.filter { it.Size == 1 }.size))
+			if (personList.any { it.Size == 2 }) add(String.format("L %,d", personList.filter { it.Size == 2 }.size))
+			joinTo(StringBuilder(), "/", "(", ")")
+		}
+		textPerson.add(0, Pair(TextLine.make(String.format("${spaceTag}个人：%,d %s", personList.size, personSizeStr), font), black))
 	}
-	if (!limitStr.contains("部队") && fcList.isNotEmpty()) outputFc.add(String.format("部队：%,d %s", fcList.size, fcSizeStr))
-	outputFc.addAll(fcTextList)
+
+
 	// 文本转成text行
-	val textFc = outputFc.map { if (it.startsWith(outdatedWarnChar) || it.startsWith(oldDataTag)) Pair(TextLine.make(it.removePrefix(outdatedWarnChar), font), grey) else Pair(TextLine.make(it, font), black) }
+	val textFc = fcTextList.map {
+		if (it.startsWith(outdatedWarnTag) || it.startsWith(oldDataTag))
+			Pair(TextLine.make(it, font), grey)
+		else
+			Pair(TextLine.make(spaceTag + it, font), black)
+	}.toMutableList()
+	//添加标头
+	if (!limitStr.contains("部队") && fcList.isNotEmpty()) {
+		val fcSizeStr = mutableListOf<String>().run {
+			if (fcList.any { it.Size == 0 }) add(String.format("S %,d", fcList.count { it.Size == 0 }))
+			if (fcList.any { it.Size == 1 }) add(String.format("M %,d", fcList.count { it.Size == 1 }))
+			if (fcList.any { it.Size == 2 }) add(String.format("L %,d", fcList.count { it.Size == 2 }))
+			joinTo(StringBuilder(), "/", "(", ")")
+		}
+		textFc.add(0, Pair(TextLine.make(String.format("${spaceTag}部队：%,d %s", fcList.size, fcSizeStr), font), black))
+	}
+
 
 	val outputBottom = mutableListOf<String>()
 	outputBottom.add("")
-	if ((outputPerson + outputFc).any { it.contains(outdatedWarnChar) }) outputBottom.add(outdatedWarnChar + outdatedTime + outdatedWarnTips)
+	//追加抽奖人数数据过期提醒
+	if ((personTextList + fcTextList).any { it.contains(outdatedWarnTag) }) outputBottom.add(outdatedWarnTag + outdatedTime + outdatedWarnTips)
 	if (personList.size > personTextList.size || fcList.size > fcTextList.size) {
 		if (houseTipsGroup.contains(groupId)) {
 			outputBottom.add("更多空地请查阅群公告中网站")
@@ -449,30 +465,21 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 	} else
 		outputBottom.add("数据上传方式使用“/空地”查看数据源网站")
 	//多服务器查询时，打印每个服务器的数量
-	if (serverList.size != 1) {
-		val plotListPerServer = plotList.groupBy { it.ServerId }.mapKeys { serverNameMap[it.key]!! }.run {
-			this.toSortedMap(
-				Comparator<String> { a, b ->
-					if (this[a]!!.any { it.Size == 2 } && this[b]!!.any { it.Size == 2 }) {
-						this[b]!!.count { it.Size == 2 } - this[a]!!.count { it.Size == 2 }
-					} else if (this[a]!!.any { it.Size == 1 } && this[b]!!.any { it.Size == 1 }) {
-						this[b]!!.count { it.Size == 1 } - this[a]!!.count { it.Size == 1 }
-					} else
-						this[b]!!.count { it.Size == 0 } - this[a]!!.count { it.Size == 0 }
-				}
-				//compareBy({ this[it]?.count { plotInfo -> plotInfo.Size == 2 } }, { this[it]?.count { plotInfo -> plotInfo.Size == 1 } }, { this[it]?.count { plotInfo -> plotInfo.Size == 0 } })
-			)
-		}
+	if (showServerName) {
+		val plotListPerServer = plotList.groupBy { it.ServerId }.mapKeys { serverNameMap[it.key]!! }.mapValues { pair ->
+			listOf(pair.value.count { it.Size == 0 }, pair.value.count { it.Size == 1 }, pair.value.count { it.Size == 2 })
+		}.toList()
+			.sortedByDescending {it.second[0]}.sortedByDescending {it.second[1]}.sortedByDescending {it.second[2]}
+
 		val houseNumAllServer = mutableListOf<String>()
 		plotListPerServer
 			.forEach { pair ->
 				val perServer = mutableListOf<String>()
-				if (pair.value.any { it.Size == 0 }) perServer.add("S ${pair.value.count { it.Size == 0 }}")
-				if (pair.value.any { it.Size == 1 }) perServer.add("M ${pair.value.count { it.Size == 1 }}")
-				if (pair.value.any { it.Size == 2 }) perServer.add("L ${pair.value.count { it.Size == 2 }}")
-				houseNumAllServer.add(perServer.joinTo(StringBuilder(), "/", "${pair.key.take(2)}(", ")").toString())
+				if (pair.second[0]>0) perServer.add("S ${pair.second[0]}")
+				if (pair.second[1]>0) perServer.add("M ${pair.second[1]}")
+				if (pair.second[2]>0) perServer.add("L ${pair.second[2]}")
+				houseNumAllServer.add(perServer.joinTo(StringBuilder(), "/", "${pair.first.take(2)}(", ")").toString())
 			}
-
 		outputBottom.addAll(houseNumAllServer.chunked(4) { it.joinTo(StringBuilder(), ", ").toString() })
 	}
 	//如果有请求失败
@@ -487,11 +494,11 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 	}
 	while (outputBottom.lastOrNull()?.isEmpty() == true)
 		outputBottom.removeLast()
-	val textBottom = outputBottom.map { if (it.startsWith(outdatedWarnChar)) Pair(TextLine.make(it, font), grey) else Pair(TextLine.make(it, font), black) }
+	val textBottom = outputBottom.map { if (it.startsWith(outdatedWarnTag)) Pair(TextLine.make(it, font), grey) else Pair(TextLine.make(it, font), black) }
 
 	val base = if (textPerson.isEmpty()) 0F else textPerson.maxOfOrNull { it.first.width }!! + Merge_Mid
 
-	val height = font.metrics.height * (outputTitle.size + maxOf(outputPerson.size, outputFc.size) + outputBottom.size) + Merge_Up + Merge_Down
+	val height = font.metrics.height * (outputTitle.size + maxOf(textPerson.size, textFc.size) + outputBottom.size) + Merge_Up + Merge_Down
 	val width = Merge_Left + maxOf(textTitle.maxOfOrNull { it.first.width } ?: 0F, base + (textFc.maxOfOrNull { it.first.width } ?: 0F), textBottom.maxOfOrNull { it.first.width } ?: 0F) + Merge_Right
 
 	val surface = Surface.makeRasterN32Premul(width.toInt(), height.toInt())
@@ -556,9 +563,9 @@ object WannaCommand : SimpleCommand(
 		output.add(
 			String.format(
 				"%.3f/%.3f/%.3fs[%,d/%,d]，%.3f/%.3f/%.3fs[%,d/%,d]，%.3f/%.3f/%.3fs[%,d/%,d]",
-				VoteInfoCha.Logger.MinMillis / 1000.0, VoteInfoCha.Logger.MaxMillis / 1000.0, VoteInfoCha.Logger.TimeMillis.toDouble()  / 1000.0 / VoteInfoCha.Logger.CallTimes, VoteInfoCha.Logger.FailTimes, VoteInfoCha.Logger.CallTimes,
-				HouseInfo.Logger.MinMillis / 1000.0, HouseInfo.Logger.MaxMillis / 1000.0, HouseInfo.Logger.TimeMillis.toDouble()  / 1000.0/HouseInfo.Logger.CallTimes , HouseInfo.Logger.FailTimes, HouseInfo.Logger.CallTimes,
-				VoteInfoHouseHelper.Logger.MinMillis / 1000.0, VoteInfoHouseHelper.Logger.MaxMillis / 1000.0, VoteInfoHouseHelper.Logger.TimeMillis.toDouble()/ 1000.0 / VoteInfoHouseHelper.Logger.CallTimes , VoteInfoHouseHelper.Logger.FailTimes, VoteInfoHouseHelper.Logger.CallTimes,
+				VoteInfoCha.Logger.MinMillis / 1000.0, VoteInfoCha.Logger.MaxMillis / 1000.0, VoteInfoCha.Logger.TimeMillis.toDouble() / 1000.0 / VoteInfoCha.Logger.CallTimes, VoteInfoCha.Logger.FailTimes, VoteInfoCha.Logger.CallTimes,
+				HouseInfo.Logger.MinMillis / 1000.0, HouseInfo.Logger.MaxMillis / 1000.0, HouseInfo.Logger.TimeMillis.toDouble() / 1000.0 / HouseInfo.Logger.CallTimes, HouseInfo.Logger.FailTimes, HouseInfo.Logger.CallTimes,
+				VoteInfoHouseHelper.Logger.MinMillis / 1000.0, VoteInfoHouseHelper.Logger.MaxMillis / 1000.0, VoteInfoHouseHelper.Logger.TimeMillis.toDouble() / 1000.0 / VoteInfoHouseHelper.Logger.CallTimes, VoteInfoHouseHelper.Logger.FailTimes, VoteInfoHouseHelper.Logger.CallTimes,
 			)
 		)
 		output.add("")
@@ -603,12 +610,6 @@ object WannaCommand : SimpleCommand(
 			}
 		}
 		surface.close()
-		/*
-		if (commandContext.sender.isNotConsole())
-			commandContext.sender.sendMessage(commandContext.originalMessage.quote() + output.toString().trimEnd('\n'))
-		else
-			commandContext.sender.sendMessage(output.toString().trimEnd('\n'))*/
-		//commandContext.sender.sendMessage(commandContext.originalMessage.quote() + output.toString().trimEnd('\n'))
 	}
 
 	@Handler
@@ -881,8 +882,8 @@ object WannaCommand : SimpleCommand(
 				output.append(printSaleList(fcList, fcShow, now, outdatedLimit, searchList.size > 1))
 
 				//output.appendLine(String.format("今日为第%d轮%d天，%s轮%s：%s", turn, diff % 9 + 1, if (canEntry) "本" else "下", if (!canEntry) "参与" else "公示", nextEventTimeStr))
-				if (output.contains(outdatedWarnChar))
-					output.appendLine(outdatedWarnChar + outdatedTime + outdatedWarnTips)
+				if (output.contains(outdatedWarnTag))
+					output.appendLine(outdatedWarnTag + outdatedTime + outdatedWarnTips)
 				if (personList.size + fcList.size > Limit_Person.first + Limit_FC.first) {
 					if (houseTipsGroup.contains(groupId))
 						output.appendLine("更多空地请查阅群公告中网站")
@@ -896,7 +897,7 @@ object WannaCommand : SimpleCommand(
 				WannaHomeKt.logger.error { "数据转换出错：${e}\n${e.stackTraceToString()}" }
 			}
 			return output.toString().trimEnd('\n')
-			//return "获取${serverName}服务器空地为空：from：${fromStr}\ncontent：${content}"
+			//return "获取${serverName}服务器空地为空：from：${fromStr}\n content：${content}"
 		} catch (e: Exception) {
 			WannaHomeKt.logger.error { "获取<${serverName}>数据出错：${e}\n${e.stackTraceToString()}" }
 			return "获取<${serverName}>数据出错：${e}"
@@ -910,7 +911,7 @@ object WannaCommand : SimpleCommand(
 		for ((i, sale) in saleList.withIndex()) {
 			if (i < countLimit) {
 				if (sale.SaleState == 1 && nowTimeStamp - sale.Update >= outdatedLimit)
-					output.append(outdatedWarnChar)
+					output.append(outdatedWarnTag)
 				output.append(String.format("[%s %s%s%02d-%02d]", sizeMap[sale.Size], if (showServerName) "${serverNameMap[sale.ServerId]?.substring(0, 2)} " else "", territoryMap[sale.TerritoryId], sale.WardId + 1, sale.HouseId + 1))
 				if (sale.SaleState in 1..2)
 					output.append(String.format(" 参与:%,d人", sale.VoteCount))

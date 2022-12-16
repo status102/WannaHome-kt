@@ -64,11 +64,11 @@ class VoteInfoCha : VoteInfoOperate() {
 			} catch (e: Exception) {
 				CallTimes++
 				FailTimes++
-				if((e is SocketTimeoutException || e is IOException) && reCallTimes < reCallTimesLimit){
+				if ((e is SocketTimeoutException || e is IOException) && reCallTimes < reCallTimesLimit) {
 					delay(1500)
 					WannaHomeKt.logger.warning { "猹尝试第${reCallTimes + 1}次获取[${serverNameMap[serverId]}]失败：$e" }
 					return call(serverId, reCallTimes + 1)
-				}else
+				} else
 					throw e
 			}
 		}

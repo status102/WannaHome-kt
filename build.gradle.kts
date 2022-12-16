@@ -1,18 +1,11 @@
 group = "cn.status102"
-version = "0.2.6"
+version = "0.2.7"
 
 plugins {
 	val kotlinVersion = "1.7.10"
 	kotlin("jvm") version kotlinVersion
-	//kotlin("multiplatform") version "1.7.10"
 	kotlin("plugin.serialization") version kotlinVersion
-	//id("org.jetbrains.compose") version "1.1.0"
-	//kotlin("multiplatform") version "1.4.20"
-	//id("org.jetbrains.compose") version "1.3.0"
 	id("net.mamoe.mirai-console") version "2.12.0"
-	//id("com.github.johnrengelman.shadow") version "7.1.2"
-	//id("org.jetbrains.compose") version "1.2.0-alpha01-dev741"
-	//id("me.him188.maven-central-publish") version "1.0.0-dev-3"
 }
 
 
