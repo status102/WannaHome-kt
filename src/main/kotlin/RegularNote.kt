@@ -6,7 +6,6 @@ import net.mamoe.mirai.contact.Group
 import net.mamoe.mirai.utils.info
 import java.util.*
 import kotlin.math.floor
-import kotlin.random.Random
 
 @OptIn(DelicateCoroutinesApi::class)
 fun initNote() {
@@ -51,7 +50,7 @@ fun initNote() {
 			WannaHomeKt.logger.info { "注册开奖前提醒，执行时间：${unixMillisTimeToStr(nextEventTime.timeInMillis)}" }
 			delay(nextEventTime.timeInMillis - now + 5)
 			try {
-				sendTipMessage()
+				sendJoinTimeEndNotice()
 			} catch (e: Exception) {
 				WannaHomeKt.logger.info { "执行开奖前提醒出错：\n${e.stackTraceToString()}" }
 			}
@@ -99,11 +98,11 @@ suspend fun sendNoteMessage() {
 	runBlocking {
 		Bot.instances.forEach { bot ->
 			if (bot.isOnline && noteList.containsKey(bot.id)) {
-				noteList[bot.id]?.forEach {
-					launch {
-						delay(random().nextLong(30_000, 120_000))
+				launch(Dispatchers.IO) {
+					noteList[bot.id]?.forEach {
+						delay(random().nextLong(10_000, 60_000))
 						bot.getGroup(it)?.run {
-							changeBotGroupNameCard(this, canEntry)
+							changeBotGroupNameCard(this)
 							sendMessage(output.toString().trimEnd('\n'))
 						}
 					}
@@ -113,17 +112,16 @@ suspend fun sendNoteMessage() {
 	}
 }
 
-suspend fun sendTipMessage() {
+/**
+ * 参与期即将结束前，发送提醒消息
+ */
+suspend fun sendJoinTimeEndNotice() {
 	if (Data.WannaHomeGroupList.isEmpty()) return
-	val now = Calendar.getInstance().timeInMillis / 1000
-	val start = Calendar.getInstance().apply { time = strTimeToDate("2022-08-08 23:00:00") }
+	val time = TimeCalculator.getInstance()
 
-	val diff = floor((now - start.timeInMillis / 1000) / 60.0 / 60 / 24).toInt()
-	val turn = diff / 9 + 1
-	val canEntry = (diff % 9) < 5
 	val output = StringBuilder()
 
-	output.appendLine("第${turn}轮${if (canEntry) "摇号" else "公示"}今晚即将结束，请注意结束时间以免错过")
+	output.appendLine("第${time.turn}轮${if (time.canEntry) "摇号" else "公示"}今晚即将结束，请注意结束时间以免错过")
 
 	val noteList = mutableMapOf<Long, MutableSet<Long>>()
 	synchronized(groupListLock) {
@@ -140,11 +138,11 @@ suspend fun sendTipMessage() {
 	runBlocking {
 		Bot.instances.forEach { bot ->
 			if (bot.isOnline && noteList.containsKey(bot.id)) {
-				noteList[bot.id]?.forEach {
-					launch {
-						delay(Random(Calendar.getInstance().timeInMillis).nextLong(30_000, 120_000))
+				launch(Dispatchers.IO) {
+					noteList[bot.id]?.forEach {
+						delay(random().nextLong(10_000, 60_000))
 						bot.getGroup(it)?.run {
-							changeBotGroupNameCard(this, canEntry)
+							changeBotGroupNameCard(this)
 							sendMessage(output.toString().trimEnd('\n'))
 						}
 					}
@@ -158,15 +156,16 @@ suspend fun sendTipMessage() {
 /**
  * 修改BOT群名片中的提示文本【(下轮抽奖|本轮公示)】
  */
-fun changeBotGroupNameCard(group: Group?, canEntry: Boolean) {
-	if(group == null)return
-	val nextEventTimeStr = String.format("%d号%02d点", TimeCalculator.getInstance().nextEventDate.get(Calendar.DAY_OF_MONTH), TimeCalculator.getInstance().nextEventDate.get(Calendar.HOUR_OF_DAY))
+fun changeBotGroupNameCard(group: Group?) {
+	if (group == null) return
+	val time = TimeCalculator.getInstance()
+	val nextEventTimeStr = String.format("%d号%02d点", time.nextEventDate.get(Calendar.DAY_OF_MONTH), time.nextEventDate.get(Calendar.HOUR_OF_DAY))
 	group.botAsMember.apply {
 		nameCard = nameCard.replace(Regex("【.+?(】|$)"), "").let { nameCard ->
 			if (nameCard.isEmpty() || nameCard.isBlank())
 				nick
 			else
 				nameCard
-		} + "【${if (!canEntry) "下轮抽奖" else "本轮公示"}${nextEventTimeStr}】"
+		} + "【${if (!time.canEntry) "下轮抽奖" else "本轮公示"}${nextEventTimeStr}】"
 	}
 }

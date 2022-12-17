@@ -65,7 +65,7 @@ val client = OkHttpClient.Builder()
 var font: Font? = null
 
 object WannaHomeKt : KotlinPlugin(
-	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.2.9")
+	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.2.10")
 	{ author("status102") }
 ) {
 	override fun onEnable() {
@@ -661,7 +661,7 @@ object WannaCommand : SimpleCommand(
 				add(Calendar.DAY_OF_MONTH, turn * 9)
 		}
 
-		changeBotGroupNameCard(commandContext.sender.getGroupOrNull(), canEntry)
+		changeBotGroupNameCard(commandContext.sender.getGroupOrNull())
 
 		val output = getServerData(commandContext.sender.getGroupOrNull()?.id, search, realName, size.uppercase(Locale.getDefault())) { i, _ -> i >= 30 }.trimEnd('\n')
 		runBlocking {
@@ -706,7 +706,7 @@ object WannaCommand : SimpleCommand(
 				add(Calendar.DAY_OF_MONTH, turn * 9)
 		}
 
-		changeBotGroupNameCard(commandContext.sender.getGroupOrNull(), canEntry)
+		changeBotGroupNameCard(commandContext.sender.getGroupOrNull())
 
 		try {
 			getPic(realName, search, commandContext.sender.getGroupOrNull()?.id ?: 0, limitStr.uppercase(Locale.getDefault()))
