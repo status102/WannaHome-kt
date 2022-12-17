@@ -65,7 +65,7 @@ val client = OkHttpClient.Builder()
 var font: Font? = null
 
 object WannaHomeKt : KotlinPlugin(
-	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.2.8")
+	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.2.9")
 	{ author("status102") }
 ) {
 	override fun onEnable() {
@@ -403,6 +403,9 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 
 	val personTextList = personList.map(trans(now, showServerName, outdatedLimit)).take(personShow)
 	val fcTextList = fcList.map(trans(now, showServerName, outdatedLimit)).take(fcShow)
+	// 当前块是否存在前缀
+	val hasPersonPrefix = personTextList.any { it.startsWith(outdatedWarnTag) || it.startsWith(oldDataTag) }
+	val hasFcPrefix = fcTextList.any { it.startsWith(outdatedWarnTag) || it.startsWith(oldDataTag) }
 
 	val title = (String.format("[第%s轮第%s天-%s中]<%s>%s：", time.turn, time.diff % 9 + 1, if (time.canEntry) "参与" else "公示", serverName, limitStr.uppercase(Locale.getDefault())))
 	val outputTitle = mutableListOf<String>()
@@ -415,11 +418,14 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 	val textTitle = outputTitle.map { Pair(TextLine.make(it, font), black) }
 
 
+	// 个人房数据，String转TextLine
 	val textPerson = personTextList.map {
 		if (it.startsWith(outdatedWarnTag) || it.startsWith(oldDataTag))
 			Pair(TextLine.make(it, font), grey)
-		else
+		else if (hasPersonPrefix)
 			Pair(TextLine.make(spaceTag + it, font), black)
+		else
+			Pair(TextLine.make(it, font), black)
 	}.toMutableList()
 	//添加标头
 	if (!limitStr.contains("个人") && personList.isNotEmpty()) {
@@ -429,16 +435,21 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 			if (personList.any { it.Size == 2 }) add(String.format("L %,d", personList.filter { it.Size == 2 }.size))
 			joinTo(StringBuilder(), "/", "(", ")")
 		}
-		textPerson.add(0, Pair(TextLine.make(String.format("${spaceTag}个人：%,d %s", personList.size, personSizeStr), font), black))
+		if (hasPersonPrefix)
+			textPerson.add(0, Pair(TextLine.make(String.format("${spaceTag}个人：%,d %s", personList.size, personSizeStr), font), black))
+		else
+			textPerson.add(0, Pair(TextLine.make(String.format("个人：%,d %s", personList.size, personSizeStr), font), black))
 	}
 
 
-	// 文本转成text行
+	// 部队房数据，String转TextLine
 	val textFc = fcTextList.map {
 		if (it.startsWith(outdatedWarnTag) || it.startsWith(oldDataTag))
 			Pair(TextLine.make(it, font), grey)
-		else
+		else if (hasFcPrefix)
 			Pair(TextLine.make(spaceTag + it, font), black)
+		else
+			Pair(TextLine.make(it, font), black)
 	}.toMutableList()
 	//添加标头
 	if (!limitStr.contains("部队") && fcList.isNotEmpty()) {
@@ -448,7 +459,10 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 			if (fcList.any { it.Size == 2 }) add(String.format("L %,d", fcList.count { it.Size == 2 }))
 			joinTo(StringBuilder(), "/", "(", ")")
 		}
-		textFc.add(0, Pair(TextLine.make(String.format("${spaceTag}部队：%,d %s", fcList.size, fcSizeStr), font), black))
+		if (hasFcPrefix)
+			textFc.add(0, Pair(TextLine.make(String.format("${spaceTag}部队：%,d %s", fcList.size, fcSizeStr), font), black))
+		else
+			textFc.add(0, Pair(TextLine.make(String.format("部队：%,d %s", fcList.size, fcSizeStr), font), black))
 	}
 
 
@@ -469,15 +483,15 @@ suspend fun getPic(serverName: String, serverList: List<Int>, groupId: Long = 0,
 		val plotListPerServer = plotList.groupBy { it.ServerId }.mapKeys { serverNameMap[it.key]!! }.mapValues { pair ->
 			listOf(pair.value.count { it.Size == 0 }, pair.value.count { it.Size == 1 }, pair.value.count { it.Size == 2 })
 		}.toList()
-			.sortedByDescending {it.second[0]}.sortedByDescending {it.second[1]}.sortedByDescending {it.second[2]}
+			.sortedByDescending { it.second[0] }.sortedByDescending { it.second[1] }.sortedByDescending { it.second[2] }
 
 		val houseNumAllServer = mutableListOf<String>()
 		plotListPerServer
 			.forEach { pair ->
 				val perServer = mutableListOf<String>()
-				if (pair.second[0]>0) perServer.add("S ${pair.second[0]}")
-				if (pair.second[1]>0) perServer.add("M ${pair.second[1]}")
-				if (pair.second[2]>0) perServer.add("L ${pair.second[2]}")
+				if (pair.second[0] > 0) perServer.add("S ${pair.second[0]}")
+				if (pair.second[1] > 0) perServer.add("M ${pair.second[1]}")
+				if (pair.second[2] > 0) perServer.add("L ${pair.second[2]}")
 				houseNumAllServer.add(perServer.joinTo(StringBuilder(), "/", "${pair.first.take(2)}(", ")").toString())
 			}
 		outputBottom.addAll(houseNumAllServer.chunked(4) { it.joinTo(StringBuilder(), ", ").toString() })

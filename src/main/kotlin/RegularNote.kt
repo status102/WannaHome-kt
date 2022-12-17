@@ -101,8 +101,8 @@ suspend fun sendNoteMessage() {
 			if (bot.isOnline && noteList.containsKey(bot.id)) {
 				noteList[bot.id]?.forEach {
 					launch {
+						delay(random().nextLong(30_000, 120_000))
 						bot.getGroup(it)?.run {
-							delay(random().nextLong(30_000, 120_000))
 							changeBotGroupNameCard(this, canEntry)
 							sendMessage(output.toString().trimEnd('\n'))
 						}
@@ -142,8 +142,8 @@ suspend fun sendTipMessage() {
 			if (bot.isOnline && noteList.containsKey(bot.id)) {
 				noteList[bot.id]?.forEach {
 					launch {
+						delay(Random(Calendar.getInstance().timeInMillis).nextLong(30_000, 120_000))
 						bot.getGroup(it)?.run {
-							delay(Random(Calendar.getInstance().timeInMillis).nextLong(30_000, 120_000))
 							changeBotGroupNameCard(this, canEntry)
 							sendMessage(output.toString().trimEnd('\n'))
 						}
