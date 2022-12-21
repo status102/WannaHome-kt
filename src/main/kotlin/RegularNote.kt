@@ -1,15 +1,17 @@
 package cn.status102
 
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import net.mamoe.mirai.Bot
 import net.mamoe.mirai.contact.Group
 import net.mamoe.mirai.utils.info
 import java.util.*
 import kotlin.math.floor
 
-@OptIn(DelicateCoroutinesApi::class)
 fun initNote() {
-	GlobalScope.launch(Dispatchers.IO) {
+	WannaHomeKt.launch(Dispatchers.IO) {
 		while (true) {
 			val now = Calendar.getInstance().timeInMillis
 			val start = Calendar.getInstance().apply { time = strTimeToDate("2022-08-08 23:00:00") }
@@ -33,7 +35,7 @@ fun initNote() {
 		}
 	}
 
-	GlobalScope.launch(Dispatchers.IO) {
+	WannaHomeKt.launch(Dispatchers.IO) {
 		while (true) {
 			val now = Calendar.getInstance().timeInMillis
 			val start = Calendar.getInstance().apply { time = strTimeToDate("2022-08-08 20:00:00") }

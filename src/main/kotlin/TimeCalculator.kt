@@ -53,3 +53,15 @@ abstract class TimeCalculator {
 		add(Calendar.DAY_OF_MONTH, ((turn - 1) * 9 + diff))
 	}.timeInMillis
 }
+
+
+fun diffTimeToStr(diff: Long, showMillis: Boolean = true, showDays: Boolean = false): String {
+	val diffSec = diff / 1000
+	val left = if (showDays)
+		String.format("%,d日 %d:%02d:%02d", diffSec / 24 / 3600, (diffSec / 3600) % 24, (diffSec / 60) % 60, diffSec % 60)
+	else
+		String.format("%,d:%02d:%02d", diffSec / 3600, (diffSec / 60) % 60, diffSec % 60)
+	if (showMillis)
+		return String.format("${left}.%03d", diff % 1000)
+	return left
+}
