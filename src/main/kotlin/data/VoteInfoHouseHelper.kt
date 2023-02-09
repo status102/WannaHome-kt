@@ -15,6 +15,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import net.mamoe.mirai.console.data.AutoSavePluginData
 import net.mamoe.mirai.console.data.value
+import net.mamoe.mirai.console.plugin.author
+import net.mamoe.mirai.console.plugin.name
+import net.mamoe.mirai.console.plugin.version
 import net.mamoe.mirai.utils.warning
 import okhttp3.CacheControl
 import okhttp3.Call
@@ -45,10 +48,11 @@ class VoteInfoHouseHelper : VoteInfoOperate() {
 		private const val HomeUrl = "https://househelper.ffxiv.cyou/api/sales?server="
 		private fun newRequest(serverId: Int): Request {
 			return Request.Builder().url(HomeUrl + serverId).get()
-				.cacheControl(CacheControl.Builder().maxAge(1, TimeUnit.MINUTES).build()).run {
+				.cacheControl(CacheControl.Builder().maxAge(1, TimeUnit.MINUTES).build()).also {
+					it.addHeader("User-Agent","${WannaHomeKt.name} ${WannaHomeKt.version}/${WannaHomeKt.author}<status102@outlook.com>")
 					//if (LastModified.isNotEmpty())
 					//this.addHeader("If-Modified-Since", LastModified)
-					this
+					//this
 				}.build()
 		}
 

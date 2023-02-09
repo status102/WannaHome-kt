@@ -68,7 +68,7 @@ val client = OkHttpClient.Builder()
 var font: Font? = null
 
 object WannaHomeKt : KotlinPlugin(
-	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.3.2")
+	JvmPluginDescription(id = "cn.status102.WannaHome-kt", name = "WannaHome-kt", version = "0.3.4")
 	{ author("status102") }
 ) {
 	override fun onEnable() {

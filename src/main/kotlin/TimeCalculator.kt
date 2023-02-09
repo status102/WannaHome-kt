@@ -22,6 +22,8 @@ abstract class TimeCalculator {
 		}
 	}
 
+	val generate = Calendar.getInstance().timeInMillis
+
 	val start: Calendar = Calendar.getInstance().apply { time = strTimeToDate("2022-08-08 23:00:00") }
 
 	val diff = floor((Calendar.getInstance().timeInMillis - start.timeInMillis) / 1000 / 60.0 / 60 / 24).toInt()
@@ -50,7 +52,7 @@ abstract class TimeCalculator {
 	}
 
 	val nextUpdateTime = (start.clone() as Calendar).apply {
-		add(Calendar.DAY_OF_MONTH, ((turn - 1) * 9 + diff))
+		add(Calendar.DAY_OF_MONTH, diff + 1)
 	}.timeInMillis
 }
 

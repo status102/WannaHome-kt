@@ -1,5 +1,5 @@
 group = "cn.status102"
-version = "0.3.2"
+version = "0.3.4"
 
 plugins {
 	val kotlinVersion = "1.7.10"

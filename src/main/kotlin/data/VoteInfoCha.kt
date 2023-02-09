@@ -15,6 +15,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import net.mamoe.mirai.console.data.AutoSavePluginData
 import net.mamoe.mirai.console.data.value
+import net.mamoe.mirai.console.plugin.author
+import net.mamoe.mirai.console.plugin.name
+import net.mamoe.mirai.console.plugin.version
 import net.mamoe.mirai.utils.warning
 import okhttp3.Call
 import okhttp3.Request
@@ -44,10 +47,11 @@ class VoteInfoCha : VoteInfoOperate() {
 			return Request.Builder().url(HomeUrl + serverId).get()
 				//.cacheControl(CacheControl.Builder().maxAge(1, TimeUnit.MINUTES).noCache().build())
 				.header("Cache-Control", "public, no-cache")
-				.run {
+				.also {
+					it.addHeader("User-Agent","${WannaHomeKt.name} ${WannaHomeKt.version}/${WannaHomeKt.author}<status102@outlook.com>")
 					if (LastModified.isNotEmpty())
-						this.addHeader("If-Modified-Since", LastModified)
-					this
+						it.addHeader("If-Modified-Since", LastModified)
+					//this
 				}.build()
 		}
 

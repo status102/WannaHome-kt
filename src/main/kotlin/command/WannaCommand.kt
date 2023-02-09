@@ -76,7 +76,7 @@ object WannaCommand : SimpleCommand(
 				"当前配置号主：" + Config.owner.toString().run { if (this.length > 4) this.take(2) + "*".repeat(this.length - 4) + this.takeLast(2) else this }
 			)
 		output.add("所有空地信息均由玩家上传，希望更多人能加入上传信息的队列")
-		output.add("By status102/${WannaHomeKt.name}/${WannaHomeKt.version}")
+		output.add("By status102/${WannaHomeKt.name}<${WannaHomeKt.version}>")
 
 		val outputTextLine = output.map { TextLine.make(it, font) }
 
